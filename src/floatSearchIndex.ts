@@ -1629,6 +1629,9 @@ class FloatSearchModal extends Modal {
 		}
 		inputEl.focus();
 		inputEl.onkeydown = (e) => {
+			if (e.isComposing || e.key === "Process" || e.keyCode === 229) {
+				return;
+			}
 			const currentView = this.searchLeaf.view as SearchView;
 			switch (e.key) {
 				case "ArrowDown":
@@ -1961,6 +1964,7 @@ interface CmdkResult {
 class FloatSearchCmdkModal extends SuggestModal<CmdkResult> {
 	plugin: FloatSearchPlugin;
 	private bodyEl: HTMLElement;
+	private isComposing = false;
 	private previewEl: HTMLElement | undefined;
 	private fileLeaf: WorkspaceLeaf | undefined;
 	private fileEmbeddedView: EmbeddedView | undefined;
@@ -1983,6 +1987,14 @@ class FloatSearchCmdkModal extends SuggestModal<CmdkResult> {
 
 	onOpen() {
 		super.onOpen();
+		this.isComposing = false;
+		this.inputEl.addEventListener("compositionstart", () => {
+			this.isComposing = true;
+		});
+		this.inputEl.addEventListener("compositionend", () => {
+			this.isComposing = false;
+			this.updateSuggestions();
+		});
 		this.bodyEl = createDiv("float-search-cmdk-body");
 		this.modalEl.insertBefore(
 			this.bodyEl,
@@ -1998,6 +2010,7 @@ class FloatSearchCmdkModal extends SuggestModal<CmdkResult> {
 
 	// Override to use progressive rendering via chooser.addSuggestion
 	updateSuggestions() {
+		if (this.isComposing) return;
 		// Cancel previous in-flight search
 		this.searchAbort?.abort();
 		const abort = (this.searchAbort = new AbortController());
