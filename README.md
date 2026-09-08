@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="media/banner.jpg" alt="Floating Search Windows banner" width="720">
+  <img src="media/banner.jpg" alt="Float Search Window banner" width="720">
 </p>
 
 <p align="center">
@@ -14,7 +14,7 @@
   <img alt="Obsidian" src="https://img.shields.io/badge/Obsidian-plugin-8A5CF5?logo=obsidian&logoColor=white&style=flat-square">
 </p>
 
-# Floating Search Windows
+# Float Search Window
 
 把 Obsidian 自带的搜索视图放到浮动弹窗、分栏、标签页或独立窗口里用。本仓库面向 Windows 与中文输入法继续维护。
 
@@ -65,7 +65,7 @@
 
 1. 安装 [BRAT](https://github.com/TfTHacker/obsidian42-brat)
 2. 添加 `AiurArtanis/Obsidian-Float-Search-Windows`
-3. 启用 **Floating Search Windows**，并关闭官方 **Floating Search**（如果还开着）
+3. 启用 **Float Search Window**，并关闭官方 **Floating Search**（如果还开着）
 
 ### 手动
 
@@ -86,7 +86,7 @@
 | Open search view (split / tab / window) | 在分栏 / 标签 / 新窗口打开搜索 |
 | Show/hide file path | 切换结果里是否显示路径 |
 
-没有默认命令热键。到 **设置 → 快捷键** 搜索 `Floating Search` 自行绑定。
+没有默认命令热键。到 **设置 → 快捷键** 搜索 `Float Search` 自行绑定。
 
 ### 弹窗内操作
 

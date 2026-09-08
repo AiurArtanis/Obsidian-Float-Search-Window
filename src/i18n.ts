@@ -41,6 +41,9 @@ const VIEW_TYPE_ZH: Record<ViewTypeKey, string> = {
 export interface Strings {
 	pluginIntro: string;
 	settingsTitle: string;
+	tabGeneral: string;
+	tabQuickSearch: string;
+	tabQuickCreate: string;
 	quickSearchTrigger: string;
 	quickSearchTriggerDesc: string;
 	doubleTapInterval: string;
@@ -104,8 +107,11 @@ export interface Strings {
 
 const EN: Strings = {
 	pluginIntro:
-		"Use Obsidian's built-in search in a floating modal, split, tab, or window. This is a maintained Windows fork with IME-safe Chinese input.",
-	settingsTitle: "Floating Search Windows",
+		"Use Obsidian's built-in search in a floating modal, split, tab, or independent window.",
+	settingsTitle: "Float Search Window",
+	tabGeneral: "General",
+	tabQuickSearch: "Quick Search",
+	tabQuickCreate: "Quick Create",
 	quickSearchTrigger: "Quick search trigger",
 	quickSearchTriggerDesc:
 		"Double-tap this key to open the quick search modal (CMDK).",
@@ -177,8 +183,11 @@ const EN: Strings = {
 
 const ZH: Strings = {
 	pluginIntro:
-		"把 Obsidian 自带搜索放到浮动弹窗、分栏、标签页或独立窗口里用。本插件是面向 Windows 的维护版，中文输入法组字时不会提前搜索。",
-	settingsTitle: "Floating Search Windows",
+		"把Obsidian自带搜索放到浮动弹窗、分栏、标签页或独立窗口里用。",
+	settingsTitle: "Float Search Window",
+	tabGeneral: "常规",
+	tabQuickSearch: "快速搜索",
+	tabQuickCreate: "快速新建",
 	quickSearchTrigger: "快速搜索快捷键",
 	quickSearchTriggerDesc: "双击此键打开快速搜索（CMDK）。",
 	doubleTapInterval: "双击间隔（毫秒）",

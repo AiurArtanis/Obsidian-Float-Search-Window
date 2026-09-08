@@ -1339,8 +1339,11 @@ const triggerKeyOptions = (): Record<CmdkTriggerKey, string> => {
 	};
 };
 
+type SettingsTabId = "general" | "quick-search" | "quick-create";
+
 class FloatSearchSettingTab extends PluginSettingTab {
 	plugin: FloatSearchPlugin;
+	private activeTab: SettingsTabId = "general";
 
 	constructor(app: App, plugin: FloatSearchPlugin) {
 		super(app, plugin);
@@ -1351,11 +1354,88 @@ class FloatSearchSettingTab extends PluginSettingTab {
 		const { containerEl } = this;
 		const s = strings();
 		containerEl.empty();
+		containerEl.addClass("float-search-settings-tab");
 
-		containerEl.createEl("h2", { text: s.settingsTitle });
-		containerEl.createEl("p", { text: s.pluginIntro });
+		containerEl.createEl("h3", { text: s.settingsTitle });
+		containerEl.createEl("p", {
+			cls: "float-search-settings-intro",
+			text: s.pluginIntro,
+		});
 
-		new Setting(containerEl)
+		const tabsContainer = containerEl.createDiv({
+			cls: "float-search-settings-tabs-container",
+		});
+		const tabsList: { id: SettingsTabId; name: string }[] = [
+			{ id: "general", name: s.tabGeneral },
+			{ id: "quick-search", name: s.tabQuickSearch },
+			{ id: "quick-create", name: s.tabQuickCreate },
+		];
+		for (const tab of tabsList) {
+			const btn = tabsContainer.createEl("button", { text: tab.name });
+			if (this.activeTab === tab.id) btn.addClass("is-active");
+			btn.onclick = () => {
+				this.activeTab = tab.id;
+				this.display();
+			};
+		}
+
+		const content = containerEl.createDiv({
+			cls: "float-search-settings-content",
+		});
+		if (this.activeTab === "general") this.renderGeneral(content, s);
+		else if (this.activeTab === "quick-search")
+			this.renderQuickSearch(content, s);
+		else this.renderQuickCreate(content, s);
+	}
+
+	private renderGeneral(container: HTMLElement, s: ReturnType<typeof strings>) {
+		new Setting(container)
+			.setName(s.defaultViewType)
+			.addDropdown((dropdown) => {
+				const viewLabels = s.viewType;
+				dropdown.addOptions({
+					modal: viewLabels.modal,
+					split: viewLabels.split,
+					tab: viewLabels.tab,
+					window: viewLabels.window,
+					sidebar: viewLabels.sidebar,
+				});
+				dropdown.setValue(this.plugin.settings.defaultViewType);
+				dropdown.onChange((value) => {
+					this.plugin.settings.defaultViewType = value as searchType;
+					this.plugin.applySettingsUpdate();
+				});
+			});
+
+		new Setting(container)
+			.setName(s.showFilePath)
+			.addToggle((toggle) => {
+				toggle
+					.setValue(this.plugin.settings.showFilePath)
+					.onChange(async (value) => {
+						this.plugin.settings.showFilePath = value;
+						this.plugin.updateFilePathVisibility();
+						this.plugin.applySettingsUpdate();
+					});
+			});
+
+		new Setting(container)
+			.setName(s.showInstructions)
+			.addToggle((toggle) => {
+				toggle
+					.setValue(this.plugin.settings.showInstructions)
+					.onChange(async (value) => {
+						this.plugin.settings.showInstructions = value;
+						this.plugin.applySettingsUpdate();
+					});
+			});
+	}
+
+	private renderQuickSearch(
+		container: HTMLElement,
+		s: ReturnType<typeof strings>
+	) {
+		new Setting(container)
 			.setName(s.quickSearchTrigger)
 			.setDesc(s.quickSearchTriggerDesc)
 			.addDropdown((dropdown) => {
@@ -1372,7 +1452,7 @@ class FloatSearchSettingTab extends PluginSettingTab {
 				});
 			});
 
-		new Setting(containerEl)
+		new Setting(container)
 			.setName(s.doubleTapInterval)
 			.setDesc(s.doubleTapIntervalDesc)
 			.addSlider((slider) => {
@@ -1381,15 +1461,17 @@ class FloatSearchSettingTab extends PluginSettingTab {
 					.setValue(this.plugin.settings.cmdkDoubleTapInterval)
 					.setDynamicTooltip()
 					.onChange(async (value) => {
-						this.plugin.settings.cmdkDoubleTapInterval =
-							value;
+						this.plugin.settings.cmdkDoubleTapInterval = value;
 						await this.plugin.saveSettings();
 					});
 			});
+	}
 
-		containerEl.createEl("h3", { text: s.quickCreateHeading });
-
-		new Setting(containerEl)
+	private renderQuickCreate(
+		container: HTMLElement,
+		s: ReturnType<typeof strings>
+	) {
+		new Setting(container)
 			.setName(s.enableQuickCreate)
 			.setDesc(s.enableQuickCreateDesc)
 			.addToggle((toggle) => {
@@ -1401,27 +1483,24 @@ class FloatSearchSettingTab extends PluginSettingTab {
 					});
 			});
 
-		new Setting(containerEl)
+		new Setting(container)
 			.setName(s.quickCreateFolder)
 			.setDesc(s.quickCreateFolderDesc)
 			.addText((text) => {
 				text.setPlaceholder(s.quickCreateFolderPlaceholder)
 					.setValue(this.plugin.settings.cmdkQuickCreateFolder)
 					.onChange(async (value) => {
-						this.plugin.settings.cmdkQuickCreateFolder =
-							value;
+						this.plugin.settings.cmdkQuickCreateFolder = value;
 						await this.plugin.saveSettings();
 					});
 			});
 
-		new Setting(containerEl)
+		new Setting(container)
 			.setName(s.titleFormat)
 			.setDesc(s.titleFormatDesc)
 			.addText((text) => {
 				text.setPlaceholder("YYYYMMDDHHmmss")
-					.setValue(
-						this.plugin.settings.cmdkQuickCreateTitleFormat
-					)
+					.setValue(this.plugin.settings.cmdkQuickCreateTitleFormat)
 					.onChange(async (value) => {
 						this.plugin.settings.cmdkQuickCreateTitleFormat =
 							value;

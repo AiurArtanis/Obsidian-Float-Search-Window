@@ -1,6 +1,6 @@
 {
 	"id": "float-search",
-	"name": "Floating Search Windows",
+	"name": "Float Search Window",
 	"version": "1.0.0",
 	"minAppVersion": "1.2.0",
 	"description": "面向 Windows 的浮动搜索维护版，支持中文输入法。Continued Floating Search for Windows with IME-safe Chinese input.",
