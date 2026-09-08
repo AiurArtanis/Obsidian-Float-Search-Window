@@ -20,9 +20,10 @@
 
 [中文](README.md) | [English](README_en.md)
 
-本仓库继承自 [Quorafind/Obsidian-Float-Search](https://github.com/Quorafind/Obsidian-Float-Search)（作者 [Boninall](https://github.com/Quorafind)）。原作者已停止维护，这里从上游 4.3.0 起开一条新的发布线，当前版本 **v1.0.0**。相对上游的改动：
+本仓库继承自 [Quorafind/Obsidian-Float-Search](https://github.com/Quorafind/Obsidian-Float-Search)（作者 [Boninall](https://github.com/Quorafind)）。原作者已停止维护，这里从上游 4.3.0 起开一条新的发布线，当前版本 **v1.1.0**。相对上游的改动：
 
 - 中文输入法组字过程中不再提前触发搜索，避免拼音吞字、乱序
+- 界面跟随 Obsidian 语言，支持简体中文 / English
 - 由 [AiurArtanis](https://github.com/AiurArtanis) 继续维护与发版
 
 请给上游也点星。问题请优先在本仓库开 issue。

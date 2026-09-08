@@ -20,9 +20,10 @@ Use Obsidian's built-in search view in a floating modal, split, tab, or pop-out 
 
 [中文](README.md) | [English](README_en.md)
 
-This repository is a fork of [Quorafind/Obsidian-Float-Search](https://github.com/Quorafind/Obsidian-Float-Search) by [Boninall](https://github.com/Quorafind). The original author is no longer maintaining it. This line starts from upstream 4.3.0 as **v1.0.0**. Changes relative to upstream:
+This repository is a fork of [Quorafind/Obsidian-Float-Search](https://github.com/Quorafind/Obsidian-Float-Search) by [Boninall](https://github.com/Quorafind). The original author is no longer maintaining it. This line starts from upstream 4.3.0; current release is **v1.1.0**. Changes relative to upstream:
 
 - Block search while an IME is composing, so Chinese pinyin is not queried mid-syllable
+- UI follows Obsidian language: Simplified Chinese / English
 - Maintained and released by [AiurArtanis](https://github.com/AiurArtanis)
 
 Please star the upstream repo as well. Open issues here first.
