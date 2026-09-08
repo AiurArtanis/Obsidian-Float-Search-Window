@@ -33,6 +33,7 @@ import {
 import { EmbeddedView, isEmebeddedLeaf, spawnLeafView } from "./leafView";
 import { around } from "monkey-around";
 import { debounce } from "obsidian";
+import { strings } from "./i18n";
 
 type sortOrder =
 	| "alphabetical"
@@ -194,10 +195,11 @@ export default class FloatSearchPlugin extends Plugin {
 		this.registerObsidianCommands();
 		this.registerEditorMenuHandler();
 		this.registerContextMenuHandler();
+		this.registerRibbonIcon();
 
 		this.addRibbonIcon(
-			"search",
-			`Search obsidian in ${this.settings.defaultViewType} view`,
+			"float-search-window",
+			strings().ribbonSearch(this.settings.defaultViewType),
 			() => {
 				if (this.settings.defaultViewType === "modal") {
 					this.initModal(this.state, true, true);
@@ -531,7 +533,7 @@ export default class FloatSearchPlugin extends Plugin {
 			});
 			for (const view of availableViews) {
 				menu.addItem((item: MenuItem) => {
-					item.setTitle(`${view.type} view`)
+					item.setTitle(strings().viewTypeMenu(view.type))
 						.setIcon(`${view.icon}`)
 						.onClick(async () => {
 							if (view.type === "modal") {
@@ -603,7 +605,7 @@ export default class FloatSearchPlugin extends Plugin {
 							);
 							viewSwitchButton
 								.setIcon("layout-template")
-								.setTooltip("Switch to File View");
+								.setTooltip(strings().switchToFileView);
 							viewSwitchButton.onClick(() => {
 								const currentType = checkCurrentViewType(
 									this.leaf
@@ -628,7 +630,7 @@ export default class FloatSearchPlugin extends Plugin {
 								this.hidePathToggle = new Setting(
 									this.searchParamsContainerEl
 								)
-									.setName("Show file path")
+									.setName(strings().showFilePath)
 									.addToggle((toggle) => {
 										toggle.toggleEl.toggleClass(
 											"mod-small",
@@ -650,7 +652,7 @@ export default class FloatSearchPlugin extends Plugin {
 								this.showInstructionsToggle = new Setting(
 									this.searchParamsContainerEl
 								)
-									.setName("Show instructions")
+									.setName(strings().showInstructions)
 									.addToggle((toggle) => {
 										toggle.toggleEl.toggleClass(
 											"mod-small",
@@ -671,14 +673,15 @@ export default class FloatSearchPlugin extends Plugin {
 								this.defaultViewTypeDropdown = new Setting(
 									this.searchParamsContainerEl
 								)
-									.setName("Default view type")
+									.setName(strings().defaultViewType)
 									.addDropdown((dropdown) => {
+										const viewLabels = strings().viewType;
 										dropdown.addOptions({
-											modal: "Modal",
-											split: "Split",
-											tab: "Tab",
-											window: "Window",
-											sidebar: "Sidebar",
+											modal: viewLabels.modal,
+											split: viewLabels.split,
+											tab: viewLabels.tab,
+											window: viewLabels.window,
+											sidebar: viewLabels.sidebar,
 										});
 										dropdown.setValue(
 											self.settings.defaultViewType
@@ -1010,7 +1013,7 @@ export default class FloatSearchPlugin extends Plugin {
 	registerObsidianCommands() {
 		this.addCommand({
 			id: "show-or-hide-file-path",
-			name: "Show/hide file path",
+			name: strings().cmdShowHideFilePath,
 			callback: () => {
 				this.changeFilePathVisibility();
 			},
@@ -1018,7 +1021,7 @@ export default class FloatSearchPlugin extends Plugin {
 
 		this.addCommand({
 			id: "search-obsidian-globally",
-			name: "Search obsidian globally",
+			name: strings().cmdSearchGlobally,
 			callback: () =>
 				this.initModal(
 					{ ...this.state, query: "", current: false },
@@ -1029,7 +1032,7 @@ export default class FloatSearchPlugin extends Plugin {
 
 		this.addCommand({
 			id: "search-obsidian-globally-state",
-			name: "Search Obsidian Globally (With Last State)",
+			name: strings().cmdSearchGloballyState,
 			callback: () =>
 				this.initModal(
 					{ ...this.state, query: this.state.query, current: false },
@@ -1040,7 +1043,7 @@ export default class FloatSearchPlugin extends Plugin {
 
 		this.createCommand({
 			id: "search-in-backlink",
-			name: "Search in backlink Of current file",
+			name: strings().cmdSearchBacklink,
 			queryBuilder: (file?: TFile) => {
 				if (!file) return "";
 				return (
@@ -1054,7 +1057,7 @@ export default class FloatSearchPlugin extends Plugin {
 
 		this.createCommand({
 			id: "search-in-current-file",
-			name: "Search in current file",
+			name: strings().cmdSearchCurrentFile,
 			queryBuilder: (file?: TFile) => {
 				if (!file) return "";
 				return " path:" + `"${file.path}"`;
@@ -1068,7 +1071,7 @@ export default class FloatSearchPlugin extends Plugin {
 		for (const type of ["split", "tab", "window"] as PaneType[]) {
 			this.addCommand({
 				id: `open-search-view-${type}`,
-				name: `Open search view (${type})`,
+				name: strings().cmdOpenSearchView(type),
 				callback: async () => {
 					const existingLeaf =
 						this.app.workspace.getLeavesOfType("search");
@@ -1120,70 +1123,71 @@ export default class FloatSearchPlugin extends Plugin {
 	}
 
 	registerSearchOperatorCommands() {
+		const s = strings();
 		const searchOperators = [
 			{
 				id: "search-file-operator",
-				name: "Search: file: (Find text in filename)",
+				name: s.cmdSearchFile,
 				query: "file:",
 			},
 			{
 				id: "search-path-operator",
-				name: "Search: path: (Find text in file path)",
+				name: s.cmdSearchPath,
 				query: "path:",
 			},
 			{
 				id: "search-content-operator",
-				name: "Search: content: (Find text in file content)",
+				name: s.cmdSearchContent,
 				query: "content:",
 			},
 			{
 				id: "search-match-case-operator",
-				name: "Search: match-case: (Case-sensitive match)",
+				name: s.cmdSearchMatchCase,
 				query: "match-case:",
 			},
 			{
 				id: "search-ignore-case-operator",
-				name: "Search: ignore-case: (Case-insensitive match)",
+				name: s.cmdSearchIgnoreCase,
 				query: "ignore-case:",
 			},
 			{
 				id: "search-tag-operator",
-				name: "Search: tag: (Find tag)",
+				name: s.cmdSearchTag,
 				query: "tag:",
 			},
 			{
 				id: "search-line-operator",
-				name: "Search: line: (Find files with matching line)",
+				name: s.cmdSearchLine,
 				query: "line:",
 			},
 			{
 				id: "search-block-operator",
-				name: "Search: block: (Find matches in the same block)",
+				name: s.cmdSearchBlock,
 				query: "block:",
 			},
 			{
 				id: "search-section-operator",
-				name: "Search: section: (Find matches in the same section)",
+				name: s.cmdSearchSection,
 				query: "section:",
 			},
 			{
 				id: "search-task-operator",
-				name: "Search: task: (Find matches in a task)",
+				name: s.cmdSearchTask,
 				query: "task:",
 			},
 			{
 				id: "search-task-todo-operator",
-				name: "Search: task-todo: (Find matches in uncompleted tasks)",
+				name: s.cmdSearchTaskTodo,
 				query: "task-todo:",
 			},
 			{
 				id: "search-task-done-operator",
-				name: "Search: task-done: (Find matches in completed tasks)",
+				name: s.cmdSearchTaskDone,
 				query: "task-done:",
 			},
 			{
 				id: "search-property",
-				name: "Search: [property] or [property:value]",
+				name: s.cmdSearchProperty,
 				query: "[]",
 			},
 		];
@@ -1227,9 +1231,7 @@ export default class FloatSearchPlugin extends Plugin {
 
 					menu.addItem((item) => {
 						// Add sub menu
-						item.setTitle(
-							'Search "' + searchWord + '"' + " in Float Search"
-						)
+						item.setTitle(strings().menuSearchInFloat(searchWord))
 							.setIcon("search")
 							.onClick(() =>
 								this.initModal(
@@ -1264,7 +1266,7 @@ export default class FloatSearchPlugin extends Plugin {
 					if (file instanceof TFile && !popover && !leaf) {
 						menu.addItem((item) => {
 							item.setIcon("popup-open")
-								.setTitle("Open in Float Preview")
+								.setTitle(strings().menuOpenInFloatPreview)
 								.onClick(async () => {
 									if (this.modal) {
 										await this.modal.initFileView(
@@ -1292,6 +1294,15 @@ export default class FloatSearchPlugin extends Plugin {
 					}
 				}
 			)
+		);
+	}
+
+	registerRibbonIcon() {
+		// Phosphor Bold: app-window + magnifying-glass (MIT)
+		// https://phosphoricons.com/  256 viewBox scaled into Obsidian's 100x100 icon slot
+		addIcon(
+			"float-search-window",
+			`<g transform="translate(3 10) scale(0.275)" fill="currentColor"><path d="M216,36H40A20,20,0,0,0,20,56V200a20,20,0,0,0,20,20H216a20,20,0,0,0,20-20V56A20,20,0,0,0,216,36Zm-4,160H44V60H212ZM60,92a16,16,0,1,1,16,16A16,16,0,0,1,60,92Zm48,0a16,16,0,1,1,16,16A16,16,0,0,1,108,92Z"/></g><g transform="translate(38 38) scale(0.24)" fill="currentColor"><path d="M232.49,215.51,185,168a92.12,92.12,0,1,0-17,17l47.53,47.54a12,12,0,0,0,17-17ZM44,112a68,68,0,1,1,68,68A68.07,68.07,0,0,1,44,112Z"/></g>`
 		);
 	}
 
@@ -1327,16 +1338,22 @@ export default class FloatSearchPlugin extends Plugin {
 	}
 }
 
-const TRIGGER_KEY_OPTIONS: Record<CmdkTriggerKey, string> = {
-	Shift: "Double Shift",
-	Control: "Double Ctrl",
-	Alt: "Double Alt",
-	Meta: "Double Meta (Cmd/Win)",
-	none: "Disabled",
+const triggerKeyOptions = (): Record<CmdkTriggerKey, string> => {
+	const s = strings();
+	return {
+		Shift: s.triggerShift,
+		Control: s.triggerControl,
+		Alt: s.triggerAlt,
+		Meta: s.triggerMeta,
+		none: s.triggerNone,
+	};
 };
+
+type SettingsTabId = "general" | "quick-search" | "quick-create";
 
 class FloatSearchSettingTab extends PluginSettingTab {
 	plugin: FloatSearchPlugin;
+	private activeTab: SettingsTabId = "general";
 
 	constructor(app: App, plugin: FloatSearchPlugin) {
 		super(app, plugin);
@@ -1345,18 +1362,95 @@ class FloatSearchSettingTab extends PluginSettingTab {
 
 	display() {
 		const { containerEl } = this;
+		const s = strings();
 		containerEl.empty();
+		containerEl.addClass("float-search-settings-tab");
 
-		containerEl.createEl("h2", { text: "Floating Search Windows" });
+		containerEl.createEl("h3", { text: s.settingsTitle });
+		containerEl.createEl("p", {
+			cls: "float-search-settings-intro",
+			text: s.pluginIntro,
+		});
 
-		new Setting(containerEl)
-			.setName("Quick search trigger")
-			.setDesc(
-				"Double-tap this key to open the quick search modal (CMDK)."
-			)
+		const tabsContainer = containerEl.createDiv({
+			cls: "float-search-settings-tabs-container",
+		});
+		const tabsList: { id: SettingsTabId; name: string }[] = [
+			{ id: "general", name: s.tabGeneral },
+			{ id: "quick-search", name: s.tabQuickSearch },
+			{ id: "quick-create", name: s.tabQuickCreate },
+		];
+		for (const tab of tabsList) {
+			const btn = tabsContainer.createEl("button", { text: tab.name });
+			if (this.activeTab === tab.id) btn.addClass("is-active");
+			btn.onclick = () => {
+				this.activeTab = tab.id;
+				this.display();
+			};
+		}
+
+		const content = containerEl.createDiv({
+			cls: "float-search-settings-content",
+		});
+		if (this.activeTab === "general") this.renderGeneral(content, s);
+		else if (this.activeTab === "quick-search")
+			this.renderQuickSearch(content, s);
+		else this.renderQuickCreate(content, s);
+	}
+
+	private renderGeneral(container: HTMLElement, s: ReturnType<typeof strings>) {
+		new Setting(container)
+			.setName(s.defaultViewType)
+			.addDropdown((dropdown) => {
+				const viewLabels = s.viewType;
+				dropdown.addOptions({
+					modal: viewLabels.modal,
+					split: viewLabels.split,
+					tab: viewLabels.tab,
+					window: viewLabels.window,
+					sidebar: viewLabels.sidebar,
+				});
+				dropdown.setValue(this.plugin.settings.defaultViewType);
+				dropdown.onChange((value) => {
+					this.plugin.settings.defaultViewType = value as searchType;
+					this.plugin.applySettingsUpdate();
+				});
+			});
+
+		new Setting(container)
+			.setName(s.showFilePath)
+			.addToggle((toggle) => {
+				toggle
+					.setValue(this.plugin.settings.showFilePath)
+					.onChange(async (value) => {
+						this.plugin.settings.showFilePath = value;
+						this.plugin.updateFilePathVisibility();
+						this.plugin.applySettingsUpdate();
+					});
+			});
+
+		new Setting(container)
+			.setName(s.showInstructions)
+			.addToggle((toggle) => {
+				toggle
+					.setValue(this.plugin.settings.showInstructions)
+					.onChange(async (value) => {
+						this.plugin.settings.showInstructions = value;
+						this.plugin.applySettingsUpdate();
+					});
+			});
+	}
+
+	private renderQuickSearch(
+		container: HTMLElement,
+		s: ReturnType<typeof strings>
+	) {
+		new Setting(container)
+			.setName(s.quickSearchTrigger)
+			.setDesc(s.quickSearchTriggerDesc)
 			.addDropdown((dropdown) => {
 				for (const [value, label] of Object.entries(
-					TRIGGER_KEY_OPTIONS
+					triggerKeyOptions()
 				)) {
 					dropdown.addOption(value, label);
 				}
@@ -1368,30 +1462,28 @@ class FloatSearchSettingTab extends PluginSettingTab {
 				});
 			});
 
-		new Setting(containerEl)
-			.setName("Double-tap interval (ms)")
-			.setDesc(
-				"Maximum time between two key presses to trigger quick search. Default: 300ms."
-			)
+		new Setting(container)
+			.setName(s.doubleTapInterval)
+			.setDesc(s.doubleTapIntervalDesc)
 			.addSlider((slider) => {
 				slider
 					.setLimits(150, 600, 50)
 					.setValue(this.plugin.settings.cmdkDoubleTapInterval)
 					.setDynamicTooltip()
 					.onChange(async (value) => {
-						this.plugin.settings.cmdkDoubleTapInterval =
-							value;
+						this.plugin.settings.cmdkDoubleTapInterval = value;
 						await this.plugin.saveSettings();
 					});
 			});
+	}
 
-		containerEl.createEl("h3", { text: "Quick Create" });
-
-		new Setting(containerEl)
-			.setName("Enable quick create")
-			.setDesc(
-				"When no exact match is found in quick search, show an option to create a new note with the search text as content."
-			)
+	private renderQuickCreate(
+		container: HTMLElement,
+		s: ReturnType<typeof strings>
+	) {
+		new Setting(container)
+			.setName(s.enableQuickCreate)
+			.setDesc(s.enableQuickCreateDesc)
 			.addToggle((toggle) => {
 				toggle
 					.setValue(this.plugin.settings.cmdkQuickCreate)
@@ -1401,31 +1493,24 @@ class FloatSearchSettingTab extends PluginSettingTab {
 					});
 			});
 
-		new Setting(containerEl)
-			.setName("Quick create folder")
-			.setDesc(
-				"Folder to create new notes in. Leave empty for vault root."
-			)
+		new Setting(container)
+			.setName(s.quickCreateFolder)
+			.setDesc(s.quickCreateFolderDesc)
 			.addText((text) => {
-				text.setPlaceholder("e.g. Inbox")
+				text.setPlaceholder(s.quickCreateFolderPlaceholder)
 					.setValue(this.plugin.settings.cmdkQuickCreateFolder)
 					.onChange(async (value) => {
-						this.plugin.settings.cmdkQuickCreateFolder =
-							value;
+						this.plugin.settings.cmdkQuickCreateFolder = value;
 						await this.plugin.saveSettings();
 					});
 			});
 
-		new Setting(containerEl)
-			.setName("Title format")
-			.setDesc(
-				"Timestamp format for the note title. Tokens: YYYY, MM, DD, HH, mm, ss."
-			)
+		new Setting(container)
+			.setName(s.titleFormat)
+			.setDesc(s.titleFormatDesc)
 			.addText((text) => {
 				text.setPlaceholder("YYYYMMDDHHmmss")
-					.setValue(
-						this.plugin.settings.cmdkQuickCreateTitleFormat
-					)
+					.setValue(this.plugin.settings.cmdkQuickCreateTitleFormat)
 					.onChange(async (value) => {
 						this.plugin.settings.cmdkQuickCreateTitleFormat =
 							value;
@@ -1525,53 +1610,54 @@ class FloatSearchModal extends Modal {
 		if (!this.plugin.settings.showInstructions) {
 			return;
 		}
-		const navigate = createInstructionElement(
+		const s = strings();
+		createInstructionElement(
 			instructionsEl,
 			"float-search-modal-instructions-navigate",
 			"↑↓",
-			"Navigate"
+			s.instrNavigate
 		);
-		const collapse = createInstructionElement(
+		createInstructionElement(
 			instructionsEl,
 			"float-search-modal-instructions-collapse",
 			"Shift+↑↓",
-			"Collapse/Expand"
+			s.instrCollapse
 		);
-		const enter = createInstructionElement(
+		createInstructionElement(
 			instructionsEl,
 			"float-search-modal-instructions-enter",
 			"↵",
-			"Open in background"
+			s.instrOpenBackground
 		);
-		const altEnter = createInstructionElement(
+		createInstructionElement(
 			instructionsEl,
 			"float-search-modal-instructions-alt-enter",
 			"Alt+↵",
-			"Open File and Close"
+			s.instrOpenAndClose
 		);
-		const ctrlEnter = createInstructionElement(
+		createInstructionElement(
 			instructionsEl,
 			"float-search-modal-instructions-ctrl-enter",
 			"Ctrl+↵",
-			"Create File When Not Exist"
+			s.instrCreateIfMissing
 		);
-		const tab = createInstructionElement(
+		createInstructionElement(
 			instructionsEl,
 			"float-search-modal-instructions-tab",
 			"Tab/Shift+Tab",
-			"Preview/Close Preview"
+			s.instrPreview
 		);
-		const switchView = createInstructionElement(
+		createInstructionElement(
 			instructionsEl,
 			"float-search-modal-instructions-switch",
 			"Ctrl+G",
-			"Switch Between Search and File View"
+			s.instrSwitchView
 		);
-		const click = createInstructionElement(
+		createInstructionElement(
 			instructionsEl,
 			"float-search-modal-instructions-click",
 			"Alt+Click",
-			"Close Modal While In File View"
+			s.instrAltClick
 		);
 	}
 
@@ -1974,12 +2060,13 @@ class FloatSearchCmdkModal extends SuggestModal<CmdkResult> {
 		super(plugin.app);
 		this.plugin = plugin;
 		this.limit = 50;
-		this.setPlaceholder("Search files and content...");
+		const s = strings();
+		this.setPlaceholder(s.cmdkPlaceholder);
 		this.setInstructions([
-			{ command: "↑↓", purpose: "Navigate" },
-			{ command: "↵", purpose: "Open" },
-			{ command: "Shift ↵", purpose: "New tab" },
-			{ command: "esc", purpose: "Close" },
+			{ command: "↑↓", purpose: s.cmdkNavigate },
+			{ command: "↵", purpose: s.cmdkOpen },
+			{ command: "Shift ↵", purpose: s.cmdkNewTab },
+			{ command: "esc", purpose: s.cmdkClose },
 		]);
 		this.modalEl.addClass("float-search-cmdk");
 		this.containerEl.addClass("float-search-cmdk-container");
@@ -2247,7 +2334,7 @@ class FloatSearchCmdkModal extends SuggestModal<CmdkResult> {
 			el.addClass("float-search-cmdk-create-item");
 			const contentEl = el.createDiv("suggestion-content");
 			const titleEl = contentEl.createDiv("suggestion-title");
-			titleEl.setText("Create new note");
+			titleEl.setText(strings().cmdkCreateNote);
 			const noteEl = contentEl.createDiv("suggestion-note");
 			const folder =
 				this.plugin.settings.cmdkQuickCreateFolder || "/";

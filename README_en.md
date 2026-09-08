@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="media/banner.jpg" alt="Floating Search Windows banner" width="720">
+  <img src="media/banner.jpg" alt="Float Search Window banner" width="720">
 </p>
 
 <p align="center">
@@ -14,15 +14,16 @@
   <img alt="Obsidian" src="https://img.shields.io/badge/Obsidian-plugin-8A5CF5?logo=obsidian&logoColor=white&style=flat-square">
 </p>
 
-# Floating Search Windows
+# Float Search Window
 
 Use Obsidian's built-in search view in a floating modal, split, tab, or pop-out window. This repository continues maintenance for Windows and Chinese IME.
 
 [中文](README.md) | [English](README_en.md)
 
-This repository is a fork of [Quorafind/Obsidian-Float-Search](https://github.com/Quorafind/Obsidian-Float-Search) by [Boninall](https://github.com/Quorafind). The original author is no longer maintaining it. This line starts from upstream 4.3.0 as **v1.0.0**. Changes relative to upstream:
+This repository is a fork of [Quorafind/Obsidian-Float-Search](https://github.com/Quorafind/Obsidian-Float-Search) by [Boninall](https://github.com/Quorafind). The original author is no longer maintaining it. This line starts from upstream 4.3.0; current release is **v1.1.0**. Changes relative to upstream:
 
 - Block search while an IME is composing, so Chinese pinyin is not queried mid-syllable
+- UI follows Obsidian language: Simplified Chinese / English
 - Maintained and released by [AiurArtanis](https://github.com/AiurArtanis)
 
 Please star the upstream repo as well. Open issues here first.
@@ -65,7 +66,7 @@ This repo is not in the official community plugin list. The plugin id stays `flo
 
 1. Install [BRAT](https://github.com/TfTHacker/obsidian42-brat)
 2. Add `AiurArtanis/Obsidian-Float-Search-Windows`
-3. Enable **Floating Search Windows**, and disable the official **Floating Search** if it is still on
+3. Enable **Float Search Window**, and disable the official **Floating Search** if it is still on
 
 ### Manual
 
@@ -86,7 +87,7 @@ This repo is not in the official community plugin list. The plugin id stays `flo
 | Open search view (split / tab / window) | Open search in a split, tab, or window |
 | Show/hide file path | Toggle paths in results |
 
-Commands have no default hotkeys. Bind them under **Settings → Hotkeys** by searching `Floating Search`.
+Commands have no default hotkeys. Bind them under **Settings → Hotkeys** by searching `Float Search`.
 
 ### Inside the modal
 
