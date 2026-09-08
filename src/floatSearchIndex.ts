@@ -195,9 +195,10 @@ export default class FloatSearchPlugin extends Plugin {
 		this.registerObsidianCommands();
 		this.registerEditorMenuHandler();
 		this.registerContextMenuHandler();
+		this.registerRibbonIcon();
 
 		this.addRibbonIcon(
-			"search",
+			"float-search-window",
 			strings().ribbonSearch(this.settings.defaultViewType),
 			() => {
 				if (this.settings.defaultViewType === "modal") {
@@ -1293,6 +1294,15 @@ export default class FloatSearchPlugin extends Plugin {
 					}
 				}
 			)
+		);
+	}
+
+	registerRibbonIcon() {
+		// Phosphor Bold: app-window + magnifying-glass (MIT)
+		// https://phosphoricons.com/  256 viewBox scaled into Obsidian's 100x100 icon slot
+		addIcon(
+			"float-search-window",
+			`<g transform="translate(3 10) scale(0.275)" fill="currentColor"><path d="M216,36H40A20,20,0,0,0,20,56V200a20,20,0,0,0,20,20H216a20,20,0,0,0,20-20V56A20,20,0,0,0,216,36Zm-4,160H44V60H212ZM60,92a16,16,0,1,1,16,16A16,16,0,0,1,60,92Zm48,0a16,16,0,1,1,16,16A16,16,0,0,1,108,92Z"/></g><g transform="translate(38 38) scale(0.24)" fill="currentColor"><path d="M232.49,215.51,185,168a92.12,92.12,0,1,0-17,17l47.53,47.54a12,12,0,0,0,17-17ZM44,112a68,68,0,1,1,68,68A68.07,68.07,0,0,1,44,112Z"/></g>`
 		);
 	}
 

@@ -268,8 +268,21 @@ body:not(.show-file-path) .search-result-file-title .search-result-file-path {
 	border-bottom: 2px solid var(--interactive-accent);
 }
 
-.float-search-settings-content .setting-item:first-child {
-	padding-top: 0;
+.float-search-settings-tab .setting-item {
+	align-items: center;
+	padding: 16px;
+}
+
+.float-search-settings-tab .setting-item-info,
+.float-search-settings-tab .setting-item-control {
+	display: flex;
+	flex-direction: column;
+	justify-content: center;
+}
+
+.float-search-settings-tab .setting-item-control {
+	flex-direction: row;
+	align-items: center;
 }
 
 .float-search-settings-tab .setting-item-control input[type="text"] {
