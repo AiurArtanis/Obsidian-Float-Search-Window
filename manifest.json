@@ -1,10 +1,10 @@
 {
 	"id": "float-search",
-	"name": "Floating Search",
-	"version": "4.3.0",
+	"name": "Floating Search Windows",
+	"version": "1.0.0",
 	"minAppVersion": "1.2.0",
-	"description": "You can use search view in modal/leaf/popout window now.",
-	"author": "Boninall",
-	"authorUrl": "https://github.com/Quorafind",
+	"description": "Continued maintenance of Floating Search for Windows, with IME-safe Chinese input.",
+	"author": "AiurArtanis",
+	"authorUrl": "https://github.com/AiurArtanis",
 	"isDesktopOnly": false
 }

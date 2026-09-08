@@ -1347,7 +1347,7 @@ class FloatSearchSettingTab extends PluginSettingTab {
 		const { containerEl } = this;
 		containerEl.empty();
 
-		containerEl.createEl("h2", { text: "Float Search Settings" });
+		containerEl.createEl("h2", { text: "Floating Search Windows" });
 
 		new Setting(containerEl)
 			.setName("Quick search trigger")
