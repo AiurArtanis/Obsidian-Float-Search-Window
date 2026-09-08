@@ -270,21 +270,41 @@ body:not(.show-file-path) .search-result-file-title .search-result-file-path {
 
 .float-search-settings-tab .setting-item {
 	align-items: center;
+	justify-content: space-between;
 	padding: 16px;
+	gap: 12px;
 }
 
-.float-search-settings-tab .setting-item-info,
-.float-search-settings-tab .setting-item-control {
+.float-search-settings-tab .setting-item-info {
 	display: flex;
 	flex-direction: column;
 	justify-content: center;
+	min-width: 0;
 }
 
 .float-search-settings-tab .setting-item-control {
+	display: flex;
 	flex-direction: row;
 	align-items: center;
+	justify-content: flex-end;
+	min-width: min(300px, 45%);
 }
 
 .float-search-settings-tab .setting-item-control input[type="text"] {
 	width: min(280px, 100%);
+}
+
+.float-search-settings-tab .setting-item-control .dropdown {
+	min-width: 140px;
+}
+
+.float-search-settings-tab .setting-item-control input[type="range"] {
+	width: min(200px, 100%);
+}
+
+@media (max-width: 600px) {
+	.float-search-settings-tab .setting-item-control {
+		min-width: 0;
+		width: 100%;
+	}
 }
