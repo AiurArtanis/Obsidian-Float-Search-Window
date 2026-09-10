@@ -103,6 +103,12 @@ export interface Strings {
 	cmdkNewTab: string;
 	cmdkClose: string;
 	cmdkCreateNote: string;
+	filterBases: string;
+	filterCanvas: string;
+	filterAll: string;
+	filterStarredOnly: string;
+	filterMatchCase: string;
+	filterRegex: string;
 }
 
 const EN: Strings = {
@@ -179,6 +185,12 @@ const EN: Strings = {
 	cmdkNewTab: "New tab",
 	cmdkClose: "Close",
 	cmdkCreateNote: "Create new note",
+	filterBases: "Bases",
+	filterCanvas: "Canvas",
+	filterAll: "All",
+	filterStarredOnly: "Starred only",
+	filterMatchCase: "Match case",
+	filterRegex: "Use regular expression",
 };
 
 const ZH: Strings = {
@@ -259,6 +271,12 @@ const ZH: Strings = {
 	cmdkNewTab: "新标签打开",
 	cmdkClose: "关闭",
 	cmdkCreateNote: "新建笔记",
+	filterBases: "数据库",
+	filterCanvas: "白板",
+	filterAll: "全部",
+	filterStarredOnly: "只看收藏",
+	filterMatchCase: "区分大小写",
+	filterRegex: "使用正则表达式",
 };
 
 export function strings(): Strings {

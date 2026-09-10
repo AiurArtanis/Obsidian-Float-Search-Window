@@ -1,5 +1,5 @@
 {
-	"name": "obsidian-float-search-windows",
+	"name": "obsidian-float-search-window",
 	"version": "1.1.0",
 	"description": "面向 Windows 的浮动搜索维护版，支持中文输入法。Continued Floating Search for Windows with IME-safe Chinese input.",
 	"main": "main.js",

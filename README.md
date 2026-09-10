@@ -5,11 +5,11 @@
 <p align="center">
   <a href="README.md"><img alt="中文" src="https://img.shields.io/badge/lang-%E4%B8%AD%E6%96%87-red?style=flat-square"></a>
   <a href="README_en.md"><img alt="English" src="https://img.shields.io/badge/lang-English-blue?style=flat-square"></a>
-  <a href="https://github.com/AiurArtanis/Obsidian-Float-Search-Windows/stargazers"><img alt="stars" src="https://img.shields.io/github/stars/AiurArtanis/Obsidian-Float-Search-Windows?style=flat-square"></a>
-  <a href="https://github.com/AiurArtanis/Obsidian-Float-Search-Windows/network/members"><img alt="forks" src="https://img.shields.io/github/forks/AiurArtanis/Obsidian-Float-Search-Windows?style=flat-square"></a>
-  <img alt="last commit" src="https://img.shields.io/github/last-commit/AiurArtanis/Obsidian-Float-Search-Windows?color=blue&style=flat-square">
-  <a href="LICENSE"><img alt="license" src="https://img.shields.io/github/license/AiurArtanis/Obsidian-Float-Search-Windows?color=blue&style=flat-square"></a>
-  <a href="https://github.com/AiurArtanis/Obsidian-Float-Search-Windows/releases"><img alt="release" src="https://img.shields.io/github/v/release/AiurArtanis/Obsidian-Float-Search-Windows?style=flat-square"></a>
+  <a href="https://github.com/AiurArtanis/Obsidian-Float-Search-Window/stargazers"><img alt="stars" src="https://img.shields.io/github/stars/AiurArtanis/Obsidian-Float-Search-Window?style=flat-square"></a>
+  <a href="https://github.com/AiurArtanis/Obsidian-Float-Search-Window/network/members"><img alt="forks" src="https://img.shields.io/github/forks/AiurArtanis/Obsidian-Float-Search-Window?style=flat-square"></a>
+  <img alt="last commit" src="https://img.shields.io/github/last-commit/AiurArtanis/Obsidian-Float-Search-Window?color=blue&style=flat-square">
+  <a href="LICENSE"><img alt="license" src="https://img.shields.io/github/license/AiurArtanis/Obsidian-Float-Search-Window?color=blue&style=flat-square"></a>
+  <a href="https://github.com/AiurArtanis/Obsidian-Float-Search-Window/releases"><img alt="release" src="https://img.shields.io/github/v/release/AiurArtanis/Obsidian-Float-Search-Window?style=flat-square"></a>
   <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-3178C6?style=flat-square&logo=typescript&logoColor=white">
   <img alt="Obsidian" src="https://img.shields.io/badge/Obsidian-plugin-8A5CF5?logo=obsidian&logoColor=white&style=flat-square">
 </p>
@@ -60,18 +60,18 @@
 
 ## 📦 安装
 
-本仓库目前不在官方社区插件列表中。插件 id 仍是 `float-search`，安装后热键与设置会沿用旧插件。
+本仓库目前不在官方社区插件列表中。插件 id 是 `float-search-window`，与官方 Floating Search（`float-search`）互不覆盖。
 
 ### BRAT
 
 1. 安装 [BRAT](https://github.com/TfTHacker/obsidian42-brat)
-2. 添加 `AiurArtanis/Obsidian-Float-Search-Windows`
+2. 添加 `AiurArtanis/Obsidian-Float-Search-Window`
 3. 启用 **Float Search Window**，并关闭官方 **Floating Search**（如果还开着）
 
 ### 手动
 
-1. 从 [Releases](https://github.com/AiurArtanis/Obsidian-Float-Search-Windows/releases) 下载 `main.js`、`manifest.json`、`styles.css`
-2. 放到 `{vault}/.obsidian/plugins/float-search/`
+1. 从 [Releases](https://github.com/AiurArtanis/Obsidian-Float-Search-Window/releases) 下载 `main.js`、`manifest.json`、`styles.css`
+2. 放到 `{vault}/.obsidian/plugins/float-search-window/`
 3. 重载已安装插件，然后启用
 
 ## 使用

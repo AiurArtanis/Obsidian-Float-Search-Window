@@ -11,8 +11,6 @@ import {
 	OpenViewState,
 	PaneType,
 	Plugin,
-	prepareFuzzySearch,
-	prepareSimpleSearch,
 	renderResults,
 	SearchResult,
 	requireApiVersion,
@@ -34,6 +32,14 @@ import { EmbeddedView, isEmebeddedLeaf, spawnLeafView } from "./leafView";
 import { around } from "monkey-around";
 import { debounce } from "obsidian";
 import { strings } from "./i18n";
+import {
+	applyNativeResultFilters,
+	isFileAllowed,
+	getBookmarkedPaths,
+	matchAsSearchResult,
+	mountFilterBar,
+	watchNativeSearchResults,
+} from "./filterBar";
 
 type sortOrder =
 	| "alphabetical"
@@ -72,6 +78,11 @@ interface FloatSearchSettings {
 	cmdkQuickCreate: boolean;
 	cmdkQuickCreateFolder: string;
 	cmdkQuickCreateTitleFormat: string;
+	filterIncludeBases: boolean;
+	filterIncludeCanvas: boolean;
+	filterStarredOnly: boolean;
+	filterMatchCase: boolean;
+	filterUseRegex: boolean;
 }
 
 const DEFAULT_SETTINGS: FloatSearchSettings = {
@@ -91,6 +102,11 @@ const DEFAULT_SETTINGS: FloatSearchSettings = {
 	cmdkQuickCreate: false,
 	cmdkQuickCreateFolder: "",
 	cmdkQuickCreateTitleFormat: "YYYYMMDDHHmmss",
+	filterIncludeBases: true,
+	filterIncludeCanvas: true,
+	filterStarredOnly: false,
+	filterMatchCase: false,
+	filterUseRegex: false,
 };
 
 const allViews: viewType[] = [
@@ -1554,6 +1570,7 @@ class FloatSearchModal extends Modal {
 	private fileState: any;
 
 	private searchCtnEl: HTMLElement;
+	private unwatchFilters: (() => void) | null = null;
 	private instructionsEl: HTMLElement;
 	private fileEl: HTMLElement;
 	private viewType: string;
@@ -1590,12 +1607,15 @@ class FloatSearchModal extends Modal {
 		this.initInstructions(this.instructionsEl);
 		this.initCss(contentEl, modalEl, containerEl);
 		await this.initSearchView(this.searchCtnEl);
+		this.initFilterBar();
 		this.initInput();
 		this.initContent();
 	}
 
 	onClose() {
 		const { contentEl } = this;
+		this.unwatchFilters?.();
+		this.unwatchFilters = null;
 
 		this.cb(this.searchLeaf.view.getState());
 
@@ -1703,6 +1723,37 @@ class FloatSearchModal extends Modal {
 		}, 0);
 
 		return;
+	}
+
+	private initFilterBar() {
+		const searchRow = this.searchCtnEl.querySelector(".search-row");
+		if (searchRow) {
+			mountFilterBar(searchRow as HTMLElement, this.plugin, () =>
+				this.onFilterChange()
+			);
+		}
+		const view = this.searchLeaf.view as SearchView;
+		this.syncNativeMatchCase(view);
+		this.unwatchFilters = watchNativeSearchResults(view, this.plugin);
+	}
+
+	private onFilterChange() {
+		const view = this.searchLeaf.view as SearchView;
+		this.syncNativeMatchCase(view);
+		applyNativeResultFilters(view, this.plugin);
+	}
+
+	private syncNativeMatchCase(view: SearchView) {
+		const state = view.getState() as any;
+		if (state.matchingCase !== this.plugin.settings.filterMatchCase) {
+			view.setState(
+				{
+					...state,
+					matchingCase: this.plugin.settings.filterMatchCase,
+				},
+				{ history: false }
+			);
+		}
 	}
 
 	initInput(retries = 10) {
@@ -2088,6 +2139,14 @@ class FloatSearchCmdkModal extends SuggestModal<CmdkResult> {
 			(this as any).resultContainerEl
 		);
 		this.bodyEl.appendChild((this as any).resultContainerEl);
+		const inputWrap = this.inputEl.closest(
+			".prompt-input-container"
+		) as HTMLElement | null;
+		if (inputWrap) {
+			mountFilterBar(inputWrap, this.plugin, () =>
+				this.updateSuggestions()
+			);
+		}
 	}
 
 	// Required by SuggestModal but unused — we drive the chooser directly
@@ -2106,12 +2165,20 @@ class FloatSearchCmdkModal extends SuggestModal<CmdkResult> {
 		const chooser = (this as any).chooser;
 		const query = this.inputEl.value;
 
-		const files = this.app.vault.getFiles().filter(
-			(f: TFile) =>
-				f.extension === "md" ||
-				f.extension === "canvas" ||
-				f.extension === "pdf"
-		);
+		const bookmarks = this.plugin.settings.filterStarredOnly
+			? getBookmarkedPaths(this.app)
+			: null;
+		const files = this.app.vault.getFiles().filter((f: TFile) => {
+			if (
+				f.extension !== "md" &&
+				f.extension !== "canvas" &&
+				f.extension !== "pdf" &&
+				f.extension !== "base"
+			) {
+				return false;
+			}
+			return isFileAllowed(this.plugin, f, bookmarks);
+		});
 
 		// Empty query — show recent files
 		if (!query.trim()) {
@@ -2128,13 +2195,20 @@ class FloatSearchCmdkModal extends SuggestModal<CmdkResult> {
 			return;
 		}
 
-		// Phase 1: file name/path fuzzy (sync, instant)
-		const fuzzy = prepareFuzzySearch(query);
+		// Phase 1: file name/path (sync, instant)
 		const fileResults: CmdkResult[] = [];
 
 		for (const file of files) {
-			const nameMatch = fuzzy(file.basename);
-			const pathMatch = fuzzy(file.path);
+			const nameMatch = matchAsSearchResult(
+				this.plugin,
+				file.basename,
+				query
+			);
+			const pathMatch = matchAsSearchResult(
+				this.plugin,
+				file.path,
+				query
+			);
 			if (nameMatch || pathMatch) {
 				fileResults.push({
 					file,
@@ -2187,7 +2261,7 @@ class FloatSearchCmdkModal extends SuggestModal<CmdkResult> {
 		if (query.trim().length >= 2) {
 			this.progressiveHeadingSearch(
 				files,
-				fuzzy,
+				query,
 				chooser,
 				signal
 			);
@@ -2204,7 +2278,7 @@ class FloatSearchCmdkModal extends SuggestModal<CmdkResult> {
 
 	private progressiveHeadingSearch(
 		files: TFile[],
-		fuzzy: (text: string) => SearchResult | null,
+		query: string,
 		chooser: any,
 		signal: AbortSignal
 	) {
@@ -2225,7 +2299,11 @@ class FloatSearchCmdkModal extends SuggestModal<CmdkResult> {
 				if (!cache?.headings) continue;
 
 				for (const h of cache.headings) {
-					const headingMatch = fuzzy(h.heading);
+					const headingMatch = matchAsSearchResult(
+						this.plugin,
+						h.heading,
+						query
+					);
 					if (headingMatch) {
 						chooser.addSuggestion({
 							file,
@@ -2260,7 +2338,8 @@ class FloatSearchCmdkModal extends SuggestModal<CmdkResult> {
 		const BATCH_SIZE = 50;
 		const MAX_CONTENT_RESULTS = 20;
 		const DURATION_LIMIT = 5; // ms before yielding
-		const simpleSearch = prepareSimpleSearch(query);
+		const simpleSearch = (text: string) =>
+			matchAsSearchResult(this.plugin, text, query);
 		let idx = 0;
 		let added = 0;
 
