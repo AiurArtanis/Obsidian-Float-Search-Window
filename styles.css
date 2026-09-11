@@ -308,3 +308,107 @@ body:not(.show-file-path) .search-result-file-title .search-result-file-path {
 		width: 100%;
 	}
 }
+
+.float-search-filter-row {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 8px 12px;
+	padding: 2px 12px 10px;
+	border-bottom: 1px solid var(--background-modifier-border);
+	font-size: var(--font-ui-small);
+	color: var(--text-muted);
+	user-select: none;
+}
+
+.float-search-cmdk .float-search-filter-row {
+	padding: 6px 12px 8px;
+}
+
+.fs-filter-check {
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+	cursor: pointer;
+	padding: 2px;
+	border-radius: 4px;
+}
+
+.fs-filter-check:hover {
+	color: var(--text-normal);
+}
+
+.fs-filter-check input {
+	margin: 0;
+	accent-color: var(--interactive-accent);
+	width: 14px;
+	height: 14px;
+}
+
+.fs-filter-seg {
+	display: inline-flex;
+	background: var(--background-secondary);
+	border-radius: var(--radius-s);
+	padding: 2px;
+	gap: 2px;
+}
+
+.fs-filter-seg button {
+	border: none;
+	box-shadow: none;
+	background: transparent;
+	color: var(--text-muted);
+	font-size: var(--font-ui-smaller);
+	padding: 3px 10px;
+	border-radius: var(--radius-s);
+	cursor: pointer;
+	height: auto;
+}
+
+.fs-filter-seg button.is-active {
+	background: var(--background-primary);
+	color: var(--text-normal);
+	box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+}
+
+.fs-filter-spacer {
+	flex: 1;
+	min-width: 8px;
+}
+
+.fs-filter-icon {
+	min-width: 26px;
+	height: 22px;
+	padding: 0 5px;
+	border: 1px solid transparent;
+	border-radius: 4px;
+	background: transparent;
+	color: var(--text-muted);
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	cursor: pointer;
+	box-shadow: none;
+}
+
+.fs-filter-icon svg {
+	width: 16px;
+	height: 16px;
+	display: block;
+}
+
+.fs-filter-icon:hover {
+	color: var(--text-normal);
+	background: var(--background-modifier-hover);
+}
+
+.fs-filter-icon.is-active {
+	color: var(--color-blue, #3b82f6);
+	background: color-mix(in srgb, var(--color-blue, #3b82f6) 18%, transparent);
+	border-color: var(--color-blue, #3b82f6);
+}
+
+.search-input-container .input-right-decorator[aria-label="区分大小写"],
+.search-input-container .input-right-decorator[aria-label="Match case"] {
+	display: none !important;
+}

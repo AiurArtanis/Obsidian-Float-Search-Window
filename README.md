@@ -5,11 +5,11 @@
 <p align="center">
   <a href="README.md"><img alt="中文" src="https://img.shields.io/badge/lang-%E4%B8%AD%E6%96%87-red?style=flat-square"></a>
   <a href="README_en.md"><img alt="English" src="https://img.shields.io/badge/lang-English-blue?style=flat-square"></a>
-  <a href="https://github.com/AiurArtanis/Obsidian-Float-Search-Windows/stargazers"><img alt="stars" src="https://img.shields.io/github/stars/AiurArtanis/Obsidian-Float-Search-Windows?style=flat-square"></a>
-  <a href="https://github.com/AiurArtanis/Obsidian-Float-Search-Windows/network/members"><img alt="forks" src="https://img.shields.io/github/forks/AiurArtanis/Obsidian-Float-Search-Windows?style=flat-square"></a>
-  <img alt="last commit" src="https://img.shields.io/github/last-commit/AiurArtanis/Obsidian-Float-Search-Windows?color=blue&style=flat-square">
-  <a href="LICENSE"><img alt="license" src="https://img.shields.io/github/license/AiurArtanis/Obsidian-Float-Search-Windows?color=blue&style=flat-square"></a>
-  <a href="https://github.com/AiurArtanis/Obsidian-Float-Search-Windows/releases"><img alt="release" src="https://img.shields.io/github/v/release/AiurArtanis/Obsidian-Float-Search-Windows?style=flat-square"></a>
+  <a href="https://github.com/AiurArtanis/Obsidian-Float-Search-Window/stargazers"><img alt="stars" src="https://img.shields.io/github/stars/AiurArtanis/Obsidian-Float-Search-Window?style=flat-square"></a>
+  <a href="https://github.com/AiurArtanis/Obsidian-Float-Search-Window/network/members"><img alt="forks" src="https://img.shields.io/github/forks/AiurArtanis/Obsidian-Float-Search-Window?style=flat-square"></a>
+  <img alt="last commit" src="https://img.shields.io/github/last-commit/AiurArtanis/Obsidian-Float-Search-Window?color=blue&style=flat-square">
+  <a href="LICENSE"><img alt="license" src="https://img.shields.io/github/license/AiurArtanis/Obsidian-Float-Search-Window?color=blue&style=flat-square"></a>
+  <a href="https://github.com/AiurArtanis/Obsidian-Float-Search-Window/releases"><img alt="release" src="https://img.shields.io/github/v/release/AiurArtanis/Obsidian-Float-Search-Window?style=flat-square"></a>
   <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-3178C6?style=flat-square&logo=typescript&logoColor=white">
   <img alt="Obsidian" src="https://img.shields.io/badge/Obsidian-plugin-8A5CF5?logo=obsidian&logoColor=white&style=flat-square">
 </p>
@@ -20,18 +20,13 @@
 
 [中文](README.md) | [English](README_en.md)
 
-本仓库继承自 [Quorafind/Obsidian-Float-Search](https://github.com/Quorafind/Obsidian-Float-Search)（作者 [Boninall](https://github.com/Quorafind)）。原作者已停止维护，这里从上游 4.3.0 起开一条新的发布线，当前版本 **v1.1.0**。相对上游的改动：
-
-- 中文输入法组字过程中不再提前触发搜索，避免拼音吞字、乱序
-- 界面跟随 Obsidian 语言，支持简体中文 / English
-- 由 [AiurArtanis](https://github.com/AiurArtanis) 继续维护与发版
-
-请给上游也点星。问题请优先在本仓库开 issue。
+本仓库继承自 [Quorafind/Obsidian-Float-Search](https://github.com/Quorafind/Obsidian-Float-Search)（作者 [Boninall](https://github.com/Quorafind)）。原作者已停止维护，这里从上游 4.3.0 起继续维护。请给上游也点星。问题请优先在本仓库开 issue。
 
 ## 📖 目录
 
 - [演示](#演示)
 - [功能](#-功能)
+- [相对原版新增](#相对原版新增)
 - [安装](#-安装)
 - [使用](#使用)
 - [快捷键](#️-快捷键)
@@ -42,7 +37,7 @@
 
 ## 演示
 
-浮动搜索弹窗（上游界面，行为与本仓库一致）：
+浮动搜索弹窗：
 
 <p align="center">
   <img src="media/img.png" alt="浮动搜索弹窗截图" width="720">
@@ -53,25 +48,51 @@
 - 用弹窗、侧边栏、分栏、标签页或独立窗口打开 Obsidian 原生搜索
 - 双击 `Shift`（可改）打开 CMDK 快速搜索：文件名、标题、正文，可预览并跳到命中位置
 - 中文输入法组字完成后再搜索，不在拼音过程中打断
+- 按类型筛选数据库、白板，并可只看收藏
+- 大小写敏感、正则表达式（VSCode 式图标开关）
 - 搜索结果可在弹窗右侧预览，再决定打开位置
 - 右键选中文本即可搜索
 - 外部用 `obsidian://fs?query=关键词` 唤起
 - 快速搜索里可按时间戳文件名新建笔记
 
+## 相对原版新增
+
+相对 [Floating Search 4.3.0](https://github.com/Quorafind/Obsidian-Float-Search) 多出来的部分：
+
+| 项 | 说明 |
+|---|---|
+| 中文输入法 | 组字过程中不提前查询，避免拼音吞字、乱序 |
+| 中英界面 | 跟随 Obsidian 语言，设置、命令、按键说明都会切换 |
+| 分段设置页 | 常规 / 快速搜索 / 快速新建 三个 tab |
+| 多功能筛选 | 数据库、白板复选；全部 / 只看收藏分段按钮；Aa 与正则 |
+| 独立插件 id | `float-search-window`，不会被官方 `float-search` 覆盖 |
+
+全局搜索弹窗的过滤行：
+
+<p align="center">
+  <img src="media/filter-global.png" alt="全局搜索过滤行" width="720">
+</p>
+
+快速浮窗（双击 Shift）同样有这一行：
+
+<p align="center">
+  <img src="media/filter-cmdk.png" alt="快速搜索过滤行" width="720">
+</p>
+
 ## 📦 安装
 
-本仓库目前不在官方社区插件列表中。插件 id 仍是 `float-search`，安装后热键与设置会沿用旧插件。
+本仓库目前不在官方社区插件列表中。插件 id 是 `float-search-window`，与官方 Floating Search（`float-search`）互不覆盖。
 
 ### BRAT
 
 1. 安装 [BRAT](https://github.com/TfTHacker/obsidian42-brat)
-2. 添加 `AiurArtanis/Obsidian-Float-Search-Windows`
+2. 添加 `AiurArtanis/Obsidian-Float-Search-Window`
 3. 启用 **Float Search Window**，并关闭官方 **Floating Search**（如果还开着）
 
 ### 手动
 
-1. 从 [Releases](https://github.com/AiurArtanis/Obsidian-Float-Search-Windows/releases) 下载 `main.js`、`manifest.json`、`styles.css`
-2. 放到 `{vault}/.obsidian/plugins/float-search/`
+1. 从 [Releases](https://github.com/AiurArtanis/Obsidian-Float-Search-Window/releases) 下载 `main.js`、`manifest.json`、`styles.css`
+2. 放到 `{vault}/.obsidian/plugins/float-search-window/`
 3. 重载已安装插件，然后启用
 
 ## 使用
@@ -80,12 +101,12 @@
 
 | 命令 | 作用 |
 |---|---|
-| Search obsidian globally | 全局搜索，每次打开清空关键字 |
-| Search Obsidian Globally (With Last State) | 全局搜索，保留上次关键字，约 30 秒后清空 |
-| Search in current file | 只搜当前文件 |
-| Search in backlink Of current file | 搜指向当前文件的反链 |
-| Open search view (split / tab / window) | 在分栏 / 标签 / 新窗口打开搜索 |
-| Show/hide file path | 切换结果里是否显示路径 |
+| 全局搜索 | 每次打开清空关键字 |
+| 全局搜索（保留上次关键字） | 保留上次关键字，约 30 秒后清空 |
+| 在当前文件中搜索 | 只搜当前文件 |
+| 搜索当前文件的反向链接 | 搜指向当前文件的反链 |
+| 打开搜索视图（分栏 / 标签页 / 窗口） | 在分栏 / 标签 / 新窗口打开搜索 |
+| 显示/隐藏文件路径 | 切换结果里是否显示路径 |
 
 没有默认命令热键。到 **设置 → 快捷键** 搜索 `Float Search` 自行绑定。
 
@@ -140,10 +161,9 @@ obsidian://fs?query=world&viewType=tab
 
 ## 设置
 
-- **Quick search trigger**：双击哪个键打开 CMDK
-- **Double-tap interval**：两次按键的最大间隔，默认 300ms
-- **Quick create**：无精确匹配时，用搜索词创建新笔记
-- **Quick create folder / Title format**：新建笔记的目录和时间戳文件名格式
+- **常规**：默认视图、是否显示路径、是否显示按键说明
+- **快速搜索**：双击哪个键打开 CMDK、两次按键的最大间隔（默认 300ms）
+- **快速新建**：无精确匹配时用搜索词建笔记，以及目录和时间戳文件名格式
 
 ## 🙏 致谢
 

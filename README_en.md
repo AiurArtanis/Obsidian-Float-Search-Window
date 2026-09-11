@@ -5,11 +5,11 @@
 <p align="center">
   <a href="README.md"><img alt="中文" src="https://img.shields.io/badge/lang-%E4%B8%AD%E6%96%87-red?style=flat-square"></a>
   <a href="README_en.md"><img alt="English" src="https://img.shields.io/badge/lang-English-blue?style=flat-square"></a>
-  <a href="https://github.com/AiurArtanis/Obsidian-Float-Search-Windows/stargazers"><img alt="stars" src="https://img.shields.io/github/stars/AiurArtanis/Obsidian-Float-Search-Windows?style=flat-square"></a>
-  <a href="https://github.com/AiurArtanis/Obsidian-Float-Search-Windows/network/members"><img alt="forks" src="https://img.shields.io/github/forks/AiurArtanis/Obsidian-Float-Search-Windows?style=flat-square"></a>
-  <img alt="last commit" src="https://img.shields.io/github/last-commit/AiurArtanis/Obsidian-Float-Search-Windows?color=blue&style=flat-square">
-  <a href="LICENSE"><img alt="license" src="https://img.shields.io/github/license/AiurArtanis/Obsidian-Float-Search-Windows?color=blue&style=flat-square"></a>
-  <a href="https://github.com/AiurArtanis/Obsidian-Float-Search-Windows/releases"><img alt="release" src="https://img.shields.io/github/v/release/AiurArtanis/Obsidian-Float-Search-Windows?style=flat-square"></a>
+  <a href="https://github.com/AiurArtanis/Obsidian-Float-Search-Window/stargazers"><img alt="stars" src="https://img.shields.io/github/stars/AiurArtanis/Obsidian-Float-Search-Window?style=flat-square"></a>
+  <a href="https://github.com/AiurArtanis/Obsidian-Float-Search-Window/network/members"><img alt="forks" src="https://img.shields.io/github/forks/AiurArtanis/Obsidian-Float-Search-Window?style=flat-square"></a>
+  <img alt="last commit" src="https://img.shields.io/github/last-commit/AiurArtanis/Obsidian-Float-Search-Window?color=blue&style=flat-square">
+  <a href="LICENSE"><img alt="license" src="https://img.shields.io/github/license/AiurArtanis/Obsidian-Float-Search-Window?color=blue&style=flat-square"></a>
+  <a href="https://github.com/AiurArtanis/Obsidian-Float-Search-Window/releases"><img alt="release" src="https://img.shields.io/github/v/release/AiurArtanis/Obsidian-Float-Search-Window?style=flat-square"></a>
   <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-3178C6?style=flat-square&logo=typescript&logoColor=white">
   <img alt="Obsidian" src="https://img.shields.io/badge/Obsidian-plugin-8A5CF5?logo=obsidian&logoColor=white&style=flat-square">
 </p>
@@ -20,18 +20,13 @@ Use Obsidian's built-in search view in a floating modal, split, tab, or pop-out 
 
 [中文](README.md) | [English](README_en.md)
 
-This repository is a fork of [Quorafind/Obsidian-Float-Search](https://github.com/Quorafind/Obsidian-Float-Search) by [Boninall](https://github.com/Quorafind). The original author is no longer maintaining it. This line starts from upstream 4.3.0; current release is **v1.1.0**. Changes relative to upstream:
-
-- Block search while an IME is composing, so Chinese pinyin is not queried mid-syllable
-- UI follows Obsidian language: Simplified Chinese / English
-- Maintained and released by [AiurArtanis](https://github.com/AiurArtanis)
-
-Please star the upstream repo as well. Open issues here first.
+This repository is a fork of [Quorafind/Obsidian-Float-Search](https://github.com/Quorafind/Obsidian-Float-Search) by [Boninall](https://github.com/Quorafind). The original author is no longer maintaining it. This line continues from upstream 4.3.0. Please star the upstream repo as well. Open issues here first.
 
 ## 📖 Table of Contents
 
 - [Demo](#demo)
 - [Features](#-features)
+- [What's new vs upstream](#whats-new-vs-upstream)
 - [Install](#-install)
 - [Usage](#usage)
 - [Shortcuts](#️-shortcuts)
@@ -42,7 +37,7 @@ Please star the upstream repo as well. Open issues here first.
 
 ## Demo
 
-Floating search modal (upstream UI; behavior matches this fork):
+Floating search modal:
 
 <p align="center">
   <img src="media/img.png" alt="Floating search modal screenshot" width="720">
@@ -53,25 +48,51 @@ Floating search modal (upstream UI; behavior matches this fork):
 - Open native Obsidian search in a modal, sidebar, split, tab, or window
 - Double-tap `Shift` (configurable) for CMDK quick search across files, headings, and content, with preview
 - Wait until IME composition ends before searching, so Chinese input is not interrupted
+- Filter by Bases and Canvas, or limit results to starred notes
+- Match case and regular expressions (VS Code-style icon toggles)
 - Preview a hit on the right of the modal before choosing where to open it
 - Right-click selected text to search
 - Launch from outside with `obsidian://fs?query=keyword`
 - Optionally create a timestamped note from the quick-search query
 
+## What's new vs upstream
+
+Added on top of [Floating Search 4.3.0](https://github.com/Quorafind/Obsidian-Float-Search):
+
+| Item | What it does |
+|---|---|
+| Chinese IME | Do not query while composing, so pinyin is not swallowed or reordered |
+| zh / en UI | Follows the Obsidian language for settings, commands, and key hints |
+| Tabbed settings | General / Quick Search / Quick Create |
+| Multi-filters | Bases and Canvas checkboxes; All / Starred only segment; Aa and regex |
+| Separate plugin id | `float-search-window`, so the official `float-search` is not overwritten |
+
+Filter row on the global search modal:
+
+<p align="center">
+  <img src="media/filter-global.png" alt="Global search filter row" width="720">
+</p>
+
+The same row on the quick-search palette (double-tap Shift):
+
+<p align="center">
+  <img src="media/filter-cmdk.png" alt="Quick search filter row" width="720">
+</p>
+
 ## 📦 Install
 
-This repo is not in the official community plugin list. The plugin id stays `float-search`, so hotkeys and settings from the original plugin are reused.
+This repo is not in the official community plugin list. The plugin id is `float-search-window`, so it does not overwrite the official Floating Search (`float-search`).
 
 ### BRAT
 
 1. Install [BRAT](https://github.com/TfTHacker/obsidian42-brat)
-2. Add `AiurArtanis/Obsidian-Float-Search-Windows`
+2. Add `AiurArtanis/Obsidian-Float-Search-Window`
 3. Enable **Float Search Window**, and disable the official **Floating Search** if it is still on
 
 ### Manual
 
-1. Download `main.js`, `manifest.json`, and `styles.css` from [Releases](https://github.com/AiurArtanis/Obsidian-Float-Search-Windows/releases)
-2. Put them in `{vault}/.obsidian/plugins/float-search/`
+1. Download `main.js`, `manifest.json`, and `styles.css` from [Releases](https://github.com/AiurArtanis/Obsidian-Float-Search-Window/releases)
+2. Put them in `{vault}/.obsidian/plugins/float-search-window/`
 3. Reload installed plugins, then enable it
 
 ## Usage
@@ -140,10 +161,9 @@ See the previous section for in-modal keys. Command hotkeys are unbound by defau
 
 ## Settings
 
-- **Quick search trigger**: which key double-tap opens CMDK
-- **Double-tap interval**: max gap between the two presses, default 300ms
-- **Quick create**: create a note from the query when there is no exact match
-- **Quick create folder / Title format**: folder and timestamp title for new notes
+- **General**: default view, show file path, show key hints
+- **Quick Search**: which key double-tap opens CMDK, and the max gap between presses (default 300ms)
+- **Quick Create**: create a note from the query when there is no exact match, plus folder and timestamp title format
 
 ## 🙏 Acknowledgements
 
