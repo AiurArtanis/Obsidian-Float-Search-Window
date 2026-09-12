@@ -1,0 +1,50 @@
+import { App, PaneType, TFile, WorkspaceLeaf } from "obsidian";
+
+export function viewTypeForFile(app: App, file: TFile): string {
+	return app.viewRegistry.typeByExtension[file.extension] ?? "markdown";
+}
+
+export function usesMarkdownView(app: App, file: TFile): boolean {
+	return viewTypeForFile(app, file) === "markdown";
+}
+
+export async function openVaultFile(
+	app: App,
+	file: TFile,
+	opts?: {
+		leaf?: WorkspaceLeaf;
+		newTab?: boolean | PaneType;
+		active?: boolean;
+		eState?: Record<string, unknown>;
+	}
+): Promise<WorkspaceLeaf | undefined> {
+	const newTab = opts?.newTab;
+	const leaf =
+		opts?.leaf ??
+		(newTab
+			? app.workspace.getLeaf(
+					newTab === true ? "tab" : newTab
+			  )
+			: app.workspace.getMostRecentLeaf() ?? app.workspace.getLeaf());
+	if (!leaf) return;
+
+	const type = viewTypeForFile(app, file);
+	const markdown = type === "markdown";
+	await leaf.openFile(file, {
+		active: opts?.active ?? true,
+		eState: markdown ? opts?.eState : undefined,
+	});
+
+	if (leaf.view?.getViewType() !== type) {
+		await leaf.setViewState({
+			type,
+			state: { file: file.path },
+			active: opts?.active ?? true,
+		});
+		if (markdown && opts?.eState) {
+			leaf.setEphemeralState(opts.eState);
+		}
+	}
+
+	return leaf;
+}

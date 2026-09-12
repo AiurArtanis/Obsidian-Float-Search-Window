@@ -40,6 +40,7 @@ import {
 	mountFilterBar,
 	watchNativeSearchResults,
 } from "./filterBar";
+import { openVaultFile, usesMarkdownView } from "./openFile";
 
 type sortOrder =
 	| "alphabetical"
@@ -1765,7 +1766,7 @@ class FloatSearchModal extends Modal {
 			return;
 		}
 		inputEl.focus();
-		inputEl.onkeydown = (e) => {
+		inputEl.onkeydown = async (e) => {
 			if (e.isComposing || e.key === "Process" || e.keyCode === 229) {
 				return;
 			}
@@ -1830,6 +1831,24 @@ class FloatSearchModal extends Modal {
 						this.plugin.app.workspace.openLinkText(real, "", true);
 						this.close();
 						break;
+					}
+					{
+						const item = currentView.dom.focusedItem;
+						const focusedFile =
+							item?.parent?.file instanceof TFile
+								? item.parent.file
+								: item?.file;
+						if (
+							focusedFile instanceof TFile &&
+							!usesMarkdownView(this.plugin.app, focusedFile)
+						) {
+							e.preventDefault();
+							await openVaultFile(this.plugin.app, focusedFile, {
+								newTab: Keymap.isModEvent(e),
+							});
+							if (e.altKey) this.close();
+							break;
+						}
 					}
 					currentView.onKeyEnterInFocus(e);
 					if (e.altKey && currentView.dom.focusedItem) {
@@ -1933,11 +1952,57 @@ class FloatSearchModal extends Modal {
 				  }
 				: undefined;
 
-		this.initFileView(file, state);
+		this.initFileView(
+			file,
+			usesMarkdownView(this.plugin.app, file) ? state : undefined
+		);
+	}
+
+	private fileFromSearchClick(target: HTMLElement | null): TFile | null {
+		const view = this.searchLeaf.view as SearchView;
+		let el: HTMLElement | null = target;
+		while (el && !el.classList.contains("tree-item")) {
+			el = el.parentElement;
+		}
+		if (!el) return null;
+		const lookup = view.dom?.resultDomLookup as
+			| Map<TFile, { el?: HTMLElement }>
+			| undefined;
+		if (lookup) {
+			for (const [file, item] of lookup) {
+				if (item?.el && (item.el === el || el.contains(item.el) || item.el.contains(el))) {
+					return file;
+				}
+			}
+		}
+		const focused = view.dom?.focusedItem;
+		const focusedFile =
+			focused?.parent?.file instanceof TFile
+				? focused.parent.file
+				: focused?.file;
+		return focusedFile instanceof TFile ? focusedFile : null;
 	}
 
 	initContent() {
 		const { contentEl } = this;
+		contentEl.addEventListener(
+			"click",
+			(e) => {
+				if (!(this.searchCtnEl as Node).contains(e.target as Node)) {
+					return;
+				}
+				const file = this.fileFromSearchClick(e.target as HTMLElement);
+				if (!file || usesMarkdownView(this.plugin.app, file)) return;
+				e.preventDefault();
+				e.stopPropagation();
+				void openVaultFile(this.plugin.app, file, {
+					newTab: Keymap.isModEvent(e),
+				}).then(() => {
+					if (e.altKey || !this.fileLeaf) this.close();
+				});
+			},
+			true
+		);
 		contentEl.onclick = (e) => {
 			const resultElement = contentEl.getElementsByClassName(
 				"search-results-children"
@@ -1983,16 +2048,7 @@ class FloatSearchModal extends Modal {
 					}
 					if (!targetElement) return;
 
-					const fileInnerEl = targetElement?.getElementsByClassName(
-						"tree-item-inner"
-					)[0] as HTMLElement;
-					const innerText = fileInnerEl.innerText;
-					const file =
-						this.plugin.app.metadataCache.getFirstLinkpathDest(
-							innerText,
-							""
-						);
-
+					const file = this.fileFromSearchClick(targetElement);
 					if (file) {
 						const item = currentView.dom.resultDomLookup.get(file);
 						currentView.dom.setFocusedItem(item);
@@ -2010,7 +2066,8 @@ class FloatSearchModal extends Modal {
 
 	async initFileView(file: TFile, state: any) {
 		if (this.fileLeaf) {
-			await this.fileLeaf.openFile(file, {
+			await openVaultFile(this.plugin.app, file, {
+				leaf: this.fileLeaf,
 				active: false,
 				eState: state,
 			});
@@ -2075,7 +2132,8 @@ class FloatSearchModal extends Modal {
 		this.fileEmbeddedView = embeddedView;
 
 		this.fileLeaf.setPinned(true);
-		await this.fileLeaf.openFile(file, {
+		await openVaultFile(this.plugin.app, file, {
+			leaf: this.fileLeaf,
 			active: false,
 			eState: state,
 		});
@@ -2483,11 +2541,6 @@ class FloatSearchCmdkModal extends SuggestModal<CmdkResult> {
 			return;
 		}
 
-		const leaf = Keymap.isModEvent(evt)
-			? this.app.workspace.getLeaf("tab")
-			: this.app.workspace.getMostRecentLeaf() ??
-				this.app.workspace.getLeaf();
-
 		const eState: Record<string, any> = {};
 		if (result.type === "heading" && result.heading) {
 			eState.subpath = "#" + result.heading;
@@ -2495,14 +2548,9 @@ class FloatSearchCmdkModal extends SuggestModal<CmdkResult> {
 			eState.line = result.line;
 		}
 
-		leaf.setViewState({
-			type: result.file.extension === "pdf" ? "pdf" : "markdown",
-			state: { file: result.file.path },
-			active: true,
-		}).then(() => {
-			if (eState.subpath || eState.line != null) {
-				leaf.setEphemeralState(eState);
-			}
+		void openVaultFile(this.app, result.file, {
+			newTab: Keymap.isModEvent(evt),
+			eState,
 		});
 	}
 
@@ -2603,8 +2651,6 @@ class FloatSearchCmdkModal extends SuggestModal<CmdkResult> {
 		this.modalEl.addClass("float-search-cmdk-expanded");
 
 		const file = result.file;
-		await this.fileLeaf!.openFile(file, { active: false });
-
 		const eState: Record<string, any> = {};
 		if (result.type === "heading" && result.heading) {
 			eState.subpath = "#" + result.heading;
@@ -2612,14 +2658,11 @@ class FloatSearchCmdkModal extends SuggestModal<CmdkResult> {
 			eState.line = result.line;
 		}
 
-		if (eState.subpath || eState.line != null) {
-			this.fileLeaf!.setViewState({
-				type: file.extension === "pdf" ? "pdf" : "markdown",
-				state: { file: file.path },
-			}).then(() => {
-				this.fileLeaf?.setEphemeralState(eState);
-			});
-		}
+		await openVaultFile(this.app, file, {
+			leaf: this.fileLeaf!,
+			active: false,
+			eState,
+		});
 
 		this.inputEl.focus();
 	}
