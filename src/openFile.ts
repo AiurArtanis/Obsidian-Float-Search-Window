@@ -1,4 +1,5 @@
 import { App, PaneType, TFile, WorkspaceLeaf } from "obsidian";
+import { isExcalidrawFile } from "./filterBar";
 
 const previewSuppress = new Set<string>();
 
@@ -12,6 +13,12 @@ export function setPreviewFile(path: string | null): void {
 }
 
 export function viewTypeForFile(app: App, file: TFile): string {
+	if (
+		isExcalidrawFile(app, file) &&
+		app.viewRegistry.viewByType["excalidraw"]
+	) {
+		return "excalidraw";
+	}
 	return app.viewRegistry.typeByExtension[file.extension] ?? "markdown";
 }
 
@@ -47,13 +54,14 @@ export async function openVaultFile(
 		eState: markdown ? opts?.eState : undefined,
 	});
 
-	if (leaf.view?.getViewType() !== type) {
+	const actual = leaf.view?.getViewType();
+	if (actual === "markdown" && type !== "markdown") {
 		await leaf.setViewState({
 			type,
 			state: { file: file.path },
 			active: opts?.active ?? true,
 		});
-		if (markdown && opts?.eState) {
+		if (opts?.eState) {
 			leaf.setEphemeralState(opts.eState);
 		}
 	}

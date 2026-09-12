@@ -103,8 +103,10 @@ export interface Strings {
 	cmdkNewTab: string;
 	cmdkClose: string;
 	cmdkCreateNote: string;
+	filterNotes: string;
 	filterBases: string;
 	filterCanvas: string;
+	filterExcalidraw: string;
 	filterPdf: string;
 	filterImages: string;
 	filterAll: string;
@@ -187,8 +189,10 @@ const EN: Strings = {
 	cmdkNewTab: "New tab",
 	cmdkClose: "Close",
 	cmdkCreateNote: "Create new note",
+	filterNotes: "Notes",
 	filterBases: "Bases",
 	filterCanvas: "Canvas",
+	filterExcalidraw: "Excalidraw",
 	filterPdf: "PDF",
 	filterImages: "Images",
 	filterAll: "All",
@@ -275,8 +279,10 @@ const ZH: Strings = {
 	cmdkNewTab: "新标签打开",
 	cmdkClose: "关闭",
 	cmdkCreateNote: "新建笔记",
+	filterNotes: "普通笔记",
 	filterBases: "数据库",
 	filterCanvas: "白板",
+	filterExcalidraw: "Excalidraw",
 	filterPdf: "PDF",
 	filterImages: "图像",
 	filterAll: "全部",

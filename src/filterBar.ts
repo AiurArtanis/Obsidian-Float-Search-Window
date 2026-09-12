@@ -10,8 +10,10 @@ import { strings } from "./i18n";
 
 export interface FilterHost {
 	settings: {
+		filterIncludeNotes: boolean;
 		filterIncludeBases: boolean;
 		filterIncludeCanvas: boolean;
+		filterIncludeExcalidraw: boolean;
 		filterIncludePdf: boolean;
 		filterIncludeImages: boolean;
 		filterStarredOnly: boolean;
@@ -45,6 +47,21 @@ export function getBookmarkedPaths(app: App): Set<string> {
 	return paths;
 }
 
+export function isExcalidrawFile(app: App, file: TFile): boolean {
+	const ext = file.extension.toLowerCase();
+	if (ext === "excalidraw") return true;
+	if (file.path.toLowerCase().endsWith(".excalidraw.md")) return true;
+	const fm = app.metadataCache.getFileCache(file)?.frontmatter;
+	if (!fm) return false;
+	return !!(
+		fm["excalidraw-plugin"] ||
+		fm.excalidraw ||
+		(typeof fm.tags === "string" && fm.tags.includes("excalidraw")) ||
+		(Array.isArray(fm.tags) &&
+			fm.tags.some((t) => String(t).toLowerCase().includes("excalidraw")))
+	);
+}
+
 const IMAGE_EXTS = new Set([
 	"png",
 	"jpg",
@@ -66,7 +83,10 @@ export function isFileAllowed(
 ): boolean {
 	if (bookmarks && !bookmarks.has(file.path)) return false;
 	const ext = file.extension.toLowerCase();
-	if (ext === "md") return true;
+	if (isExcalidrawFile(plugin.app, file)) {
+		return plugin.settings.filterIncludeExcalidraw;
+	}
+	if (ext === "md") return plugin.settings.filterIncludeNotes;
 	if (ext === "base") return plugin.settings.filterIncludeBases;
 	if (ext === "canvas") return plugin.settings.filterIncludeCanvas;
 	if (ext === "pdf") return plugin.settings.filterIncludePdf;
@@ -194,6 +214,13 @@ export function mountFilterBar(
 	};
 
 	addCheck(
+		s.filterNotes,
+		() => plugin.settings.filterIncludeNotes,
+		(v) => {
+			plugin.settings.filterIncludeNotes = v;
+		}
+	);
+	addCheck(
 		s.filterBases,
 		() => plugin.settings.filterIncludeBases,
 		(v) => {
@@ -205,6 +232,13 @@ export function mountFilterBar(
 		() => plugin.settings.filterIncludeCanvas,
 		(v) => {
 			plugin.settings.filterIncludeCanvas = v;
+		}
+	);
+	addCheck(
+		s.filterExcalidraw,
+		() => plugin.settings.filterIncludeExcalidraw,
+		(v) => {
+			plugin.settings.filterIncludeExcalidraw = v;
 		}
 	);
 	addCheck(

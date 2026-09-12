@@ -84,8 +84,10 @@ interface FloatSearchSettings {
 	cmdkQuickCreate: boolean;
 	cmdkQuickCreateFolder: string;
 	cmdkQuickCreateTitleFormat: string;
+	filterIncludeNotes: boolean;
 	filterIncludeBases: boolean;
 	filterIncludeCanvas: boolean;
+	filterIncludeExcalidraw: boolean;
 	filterIncludePdf: boolean;
 	filterIncludeImages: boolean;
 	filterStarredOnly: boolean;
@@ -110,8 +112,10 @@ const DEFAULT_SETTINGS: FloatSearchSettings = {
 	cmdkQuickCreate: false,
 	cmdkQuickCreateFolder: "",
 	cmdkQuickCreateTitleFormat: "YYYYMMDDHHmmss",
+	filterIncludeNotes: true,
 	filterIncludeBases: true,
 	filterIncludeCanvas: true,
+	filterIncludeExcalidraw: true,
 	filterIncludePdf: true,
 	filterIncludeImages: true,
 	filterStarredOnly: false,
@@ -212,10 +216,12 @@ export default class FloatSearchPlugin extends Plugin {
 			this.patchWorkspace();
 			this.patchWorkspaceLeaf();
 			this.hookRecentFilesPlugin();
+			this.hookFileExplorer();
 			this.registerEvent(
-				this.app.workspace.on("layout-change", () =>
-					this.hookRecentFilesPlugin()
-				)
+				this.app.workspace.on("layout-change", () => {
+					this.hookRecentFilesPlugin();
+					this.hookFileExplorer();
+				})
 			);
 			this.patchSearchView();
 			this.patchVchildren();
@@ -252,6 +258,7 @@ export default class FloatSearchPlugin extends Plugin {
 	}
 
 	private recentFilesHooked = false;
+	private fileExplorerHooked = false;
 
 	hookRecentFilesPlugin() {
 		if (this.recentFilesHooked) return;
@@ -292,6 +299,29 @@ export default class FloatSearchPlugin extends Plugin {
 				} as any)
 			);
 		}
+	}
+
+	hookFileExplorer() {
+		if (this.fileExplorerHooked) return;
+		const leaf = this.app.workspace.getLeavesOfType("file-explorer")[0];
+		const view = leaf?.view as any;
+		if (!view?.revealInFolder) return;
+		this.fileExplorerHooked = true;
+		this.register(
+			around(Object.getPrototypeOf(view), {
+				revealInFolder(old: (file: TAbstractFile) => void) {
+					return function (file: TAbstractFile) {
+						if (
+							file instanceof TFile &&
+							isPreviewSuppressed(file.path)
+						) {
+							return;
+						}
+						return old.call(this, file);
+					};
+				},
+			} as any)
+		);
 	}
 
 	onunload() {
@@ -2110,27 +2140,12 @@ class FloatSearchModal extends Modal {
 				preview: true,
 			});
 
-			if (
-				this.fileState?.match?.matches[0] ===
-					state?.match?.matches[0] &&
-				state &&
-				this.fileState
-			) {
-				setTimeout(() => {
-					if (this.fileLeaf) {
-						this.plugin.app.workspace.setActiveLeaf(this.fileLeaf, {
-							focus: true,
-						});
-					}
-				}, 0);
-			} else {
-				this.fileState = state;
-				setTimeout(() => {
-					(
-						this.searchLeaf.view as SearchView
-					).searchComponent?.inputEl?.focus();
-				}, 0);
-			}
+			this.fileState = state;
+			setTimeout(() => {
+				(
+					this.searchLeaf.view as SearchView
+				).searchComponent?.inputEl?.focus();
+			}, 0);
 
 			return;
 		}
