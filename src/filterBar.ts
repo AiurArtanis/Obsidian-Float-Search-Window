@@ -12,6 +12,8 @@ export interface FilterHost {
 	settings: {
 		filterIncludeBases: boolean;
 		filterIncludeCanvas: boolean;
+		filterIncludePdf: boolean;
+		filterIncludeImages: boolean;
 		filterStarredOnly: boolean;
 		filterMatchCase: boolean;
 		filterUseRegex: boolean;
@@ -43,15 +45,33 @@ export function getBookmarkedPaths(app: App): Set<string> {
 	return paths;
 }
 
+const IMAGE_EXTS = new Set([
+	"png",
+	"jpg",
+	"jpeg",
+	"gif",
+	"webp",
+	"svg",
+	"bmp",
+	"ico",
+	"avif",
+	"tif",
+	"tiff",
+]);
+
 export function isFileAllowed(
 	plugin: FilterHost,
 	file: TFile,
 	bookmarks: Set<string> | null
 ): boolean {
 	if (bookmarks && !bookmarks.has(file.path)) return false;
-	if (file.extension === "base") return plugin.settings.filterIncludeBases;
-	if (file.extension === "canvas") return plugin.settings.filterIncludeCanvas;
-	return true;
+	const ext = file.extension.toLowerCase();
+	if (ext === "md") return true;
+	if (ext === "base") return plugin.settings.filterIncludeBases;
+	if (ext === "canvas") return plugin.settings.filterIncludeCanvas;
+	if (ext === "pdf") return plugin.settings.filterIncludePdf;
+	if (IMAGE_EXTS.has(ext)) return plugin.settings.filterIncludeImages;
+	return false;
 }
 
 export function compileQueryRegex(
@@ -185,6 +205,20 @@ export function mountFilterBar(
 		() => plugin.settings.filterIncludeCanvas,
 		(v) => {
 			plugin.settings.filterIncludeCanvas = v;
+		}
+	);
+	addCheck(
+		s.filterPdf,
+		() => plugin.settings.filterIncludePdf,
+		(v) => {
+			plugin.settings.filterIncludePdf = v;
+		}
+	);
+	addCheck(
+		s.filterImages,
+		() => plugin.settings.filterIncludeImages,
+		(v) => {
+			plugin.settings.filterIncludeImages = v;
 		}
 	);
 

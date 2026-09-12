@@ -105,6 +105,8 @@ export interface Strings {
 	cmdkCreateNote: string;
 	filterBases: string;
 	filterCanvas: string;
+	filterPdf: string;
+	filterImages: string;
 	filterAll: string;
 	filterStarredOnly: string;
 	filterMatchCase: string;
@@ -187,6 +189,8 @@ const EN: Strings = {
 	cmdkCreateNote: "Create new note",
 	filterBases: "Bases",
 	filterCanvas: "Canvas",
+	filterPdf: "PDF",
+	filterImages: "Images",
 	filterAll: "All",
 	filterStarredOnly: "Starred only",
 	filterMatchCase: "Match case",
@@ -273,6 +277,8 @@ const ZH: Strings = {
 	cmdkCreateNote: "新建笔记",
 	filterBases: "数据库",
 	filterCanvas: "白板",
+	filterPdf: "PDF",
+	filterImages: "图像",
 	filterAll: "全部",
 	filterStarredOnly: "只看收藏",
 	filterMatchCase: "区分大小写",

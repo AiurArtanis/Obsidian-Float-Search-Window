@@ -1,5 +1,16 @@
 import { App, PaneType, TFile, WorkspaceLeaf } from "obsidian";
 
+const previewSuppress = new Set<string>();
+
+export function isPreviewSuppressed(path: string): boolean {
+	return previewSuppress.has(path);
+}
+
+export function setPreviewFile(path: string | null): void {
+	previewSuppress.clear();
+	if (path) previewSuppress.add(path);
+}
+
 export function viewTypeForFile(app: App, file: TFile): string {
 	return app.viewRegistry.typeByExtension[file.extension] ?? "markdown";
 }
@@ -16,15 +27,16 @@ export async function openVaultFile(
 		newTab?: boolean | PaneType;
 		active?: boolean;
 		eState?: Record<string, unknown>;
+		preview?: boolean;
 	}
 ): Promise<WorkspaceLeaf | undefined> {
+	if (opts?.preview) setPreviewFile(file.path);
+
 	const newTab = opts?.newTab;
 	const leaf =
 		opts?.leaf ??
 		(newTab
-			? app.workspace.getLeaf(
-					newTab === true ? "tab" : newTab
-			  )
+			? app.workspace.getLeaf(newTab === true ? "tab" : newTab)
 			: app.workspace.getMostRecentLeaf() ?? app.workspace.getLeaf());
 	if (!leaf) return;
 

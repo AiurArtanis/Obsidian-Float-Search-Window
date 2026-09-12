@@ -347,7 +347,9 @@ body:not(.show-file-path) .search-result-file-title .search-result-file-path {
 
 .fs-filter-seg {
 	display: inline-flex;
-	background: var(--background-secondary);
+	align-items: center;
+	background: var(--background-modifier-hover);
+	border: 1px solid var(--background-modifier-border);
 	border-radius: var(--radius-s);
 	padding: 2px;
 	gap: 2px;
@@ -365,10 +367,15 @@ body:not(.show-file-path) .search-result-file-title .search-result-file-path {
 	height: auto;
 }
 
-.fs-filter-seg button.is-active {
-	background: var(--background-primary);
+.fs-filter-seg button:hover {
 	color: var(--text-normal);
-	box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+}
+
+.fs-filter-seg button.is-active {
+	background: var(--interactive-accent);
+	color: var(--text-on-accent);
+	font-weight: var(--font-medium, 500);
+	box-shadow: none;
 }
 
 .fs-filter-spacer {

@@ -40,7 +40,12 @@ import {
 	mountFilterBar,
 	watchNativeSearchResults,
 } from "./filterBar";
-import { openVaultFile, usesMarkdownView } from "./openFile";
+import {
+	isPreviewSuppressed,
+	openVaultFile,
+	setPreviewFile,
+	usesMarkdownView,
+} from "./openFile";
 
 type sortOrder =
 	| "alphabetical"
@@ -81,6 +86,8 @@ interface FloatSearchSettings {
 	cmdkQuickCreateTitleFormat: string;
 	filterIncludeBases: boolean;
 	filterIncludeCanvas: boolean;
+	filterIncludePdf: boolean;
+	filterIncludeImages: boolean;
 	filterStarredOnly: boolean;
 	filterMatchCase: boolean;
 	filterUseRegex: boolean;
@@ -105,6 +112,8 @@ const DEFAULT_SETTINGS: FloatSearchSettings = {
 	cmdkQuickCreateTitleFormat: "YYYYMMDDHHmmss",
 	filterIncludeBases: true,
 	filterIncludeCanvas: true,
+	filterIncludePdf: true,
+	filterIncludeImages: true,
 	filterStarredOnly: false,
 	filterMatchCase: false,
 	filterUseRegex: false,
@@ -202,6 +211,12 @@ export default class FloatSearchPlugin extends Plugin {
 
 			this.patchWorkspace();
 			this.patchWorkspaceLeaf();
+			this.hookRecentFilesPlugin();
+			this.registerEvent(
+				this.app.workspace.on("layout-change", () =>
+					this.hookRecentFilesPlugin()
+				)
+			);
 			this.patchSearchView();
 			this.patchVchildren();
 			this.patchDragManager();
@@ -236,7 +251,51 @@ export default class FloatSearchPlugin extends Plugin {
 		this.addSettingTab(new FloatSearchSettingTab(this.app, this));
 	}
 
+	private recentFilesHooked = false;
+
+	hookRecentFilesPlugin() {
+		if (this.recentFilesHooked) return;
+		const recent = this.app.plugins.plugins["recent-files-obsidian"] as
+			| { shouldAddFile?: (file: TFile) => boolean; update?: (file: TFile) => void }
+			| undefined;
+		if (!recent) return;
+		this.recentFilesHooked = true;
+		if (typeof recent.shouldAddFile === "function") {
+			this.register(
+				around(recent, {
+					shouldAddFile(old: (file: TFile) => boolean) {
+						return function (file: TFile) {
+							if (file && isPreviewSuppressed(file.path)) {
+								return false;
+							}
+							const active = this.app?.workspace?.activeLeaf;
+							if (active && isEmebeddedLeaf(active)) {
+								return false;
+							}
+							return old.call(this, file);
+						};
+					},
+				} as any)
+			);
+		}
+		if (typeof recent.update === "function") {
+			this.register(
+				around(recent, {
+					update(old: (file: TFile) => void) {
+						return function (file: TFile) {
+							if (file && isPreviewSuppressed(file.path)) {
+								return;
+							}
+							return old.call(this, file);
+						};
+					},
+				} as any)
+			);
+		}
+	}
+
 	onunload() {
+		setPreviewFile(null);
 		// this.state = DEFAULT_SETTINGS.searchViewState;
 		this.modal?.close();
 	}
@@ -425,6 +484,19 @@ export default class FloatSearchPlugin extends Plugin {
 					return old.call(this, leaf, id, ...args);
 				};
 			},
+			recordMostRecentOpenedFile(old: any) {
+				return function (file: TFile) {
+					if (
+						file &&
+						(isPreviewSuppressed(file.path) ||
+							(this.activeLeaf &&
+								isEmebeddedLeaf(this.activeLeaf)))
+					) {
+						return;
+					}
+					return old.call(this, file);
+				};
+			},
 		});
 		this.register(uninstaller);
 	}
@@ -450,42 +522,6 @@ export default class FloatSearchPlugin extends Plugin {
 				},
 				openFile(old) {
 					return function (file: TFile, openState?: OpenViewState) {
-						if (isEmebeddedLeaf(this)) {
-							setTimeout(
-								around(Workspace.prototype, {
-									recordMostRecentOpenedFile(old) {
-										return function (_file: TFile) {
-											// Don't update the quick switcher's recent list
-											if (_file !== file) {
-												return old.call(this, _file);
-											}
-										};
-									},
-								}),
-								1
-							);
-							const recentFiles =
-								this.app.plugins.plugins[
-									"recent-files-obsidian"
-								];
-							if (recentFiles) {
-								setTimeout(
-									around(recentFiles, {
-										shouldAddFile(old) {
-											return function (_file: TFile) {
-												// Don't update the Recent Files plugin
-												return (
-													_file !== file &&
-													old.call(this, _file)
-												);
-											};
-										},
-									}),
-									1
-								);
-							}
-						}
-
 						const view = old.call(this, file, openState);
 						setTimeout(() => {
 							const fsCtnEl = (
@@ -1617,6 +1653,7 @@ class FloatSearchModal extends Modal {
 		const { contentEl } = this;
 		this.unwatchFilters?.();
 		this.unwatchFilters = null;
+		setPreviewFile(null);
 
 		this.cb(this.searchLeaf.view.getState());
 
@@ -2070,6 +2107,7 @@ class FloatSearchModal extends Modal {
 				leaf: this.fileLeaf,
 				active: false,
 				eState: state,
+				preview: true,
 			});
 
 			if (
@@ -2136,6 +2174,7 @@ class FloatSearchModal extends Modal {
 			leaf: this.fileLeaf,
 			active: false,
 			eState: state,
+			preview: true,
 		});
 		this.fileState = state;
 
@@ -2226,17 +2265,9 @@ class FloatSearchCmdkModal extends SuggestModal<CmdkResult> {
 		const bookmarks = this.plugin.settings.filterStarredOnly
 			? getBookmarkedPaths(this.app)
 			: null;
-		const files = this.app.vault.getFiles().filter((f: TFile) => {
-			if (
-				f.extension !== "md" &&
-				f.extension !== "canvas" &&
-				f.extension !== "pdf" &&
-				f.extension !== "base"
-			) {
-				return false;
-			}
-			return isFileAllowed(this.plugin, f, bookmarks);
-		});
+		const files = this.app.vault.getFiles().filter((f: TFile) =>
+			isFileAllowed(this.plugin, f, bookmarks)
+		);
 
 		// Empty query — show recent files
 		if (!query.trim()) {
@@ -2662,12 +2693,14 @@ class FloatSearchCmdkModal extends SuggestModal<CmdkResult> {
 			leaf: this.fileLeaf!,
 			active: false,
 			eState,
+			preview: true,
 		});
 
 		this.inputEl.focus();
 	}
 
 	onClose() {
+		setPreviewFile(null);
 		this.fileLeaf?.detach();
 		this.fileEmbeddedView?.unload();
 	}
