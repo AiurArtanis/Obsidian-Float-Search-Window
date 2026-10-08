@@ -1,17 +1,14 @@
 import "obsidian";
 import {
 	EditorPosition,
-	EphemeralState,
 	Loc,
 	MarkdownPreviewRenderer,
 	MarkdownSubView,
-	Plugin,
 	PluginManifest,
 	SuggestModal,
 	TFile,
 	TFolder,
 	View,
-	WorkspaceItem,
 	WorkspaceLeaf,
 } from "obsidian";
 import { EmbeddedViewParent } from "../leafView";
@@ -324,3 +321,4 @@ declare module "obsidian" {
 		registerGlobalCommand(command: Command): void;
 	}
 }
+

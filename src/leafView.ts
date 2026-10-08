@@ -158,7 +158,6 @@ export class EmbeddedView extends nosuper(HoverPopover) {
 		this.parent = parent;
 		this.waitTime = waitTime;
 		this.state = PopoverState.Showing;
-		const {hoverEl} = this;
 
 		this.abortController!.load();
 		this.show();
@@ -521,7 +520,7 @@ export class EmbeddedView extends nosuper(HoverPopover) {
 			this.opening = false;
 			if (this.detaching) this.hide();
 		}
-		this.plugin.app.workspace.setActiveLeaf(leaf);
+		if (!this.detaching) this.plugin.app.workspace.setActiveLeaf(leaf);
 
 		return leaf;
 	}
@@ -552,3 +551,4 @@ export class EmbeddedView extends nosuper(HoverPopover) {
 		return eState;
 	}
 }
+

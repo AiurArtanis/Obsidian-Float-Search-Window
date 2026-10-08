@@ -7,6 +7,7 @@ import {
 	TFile,
 } from "obsidian";
 import { strings } from "./i18n";
+import { around } from "monkey-around";
 
 export interface FilterHost {
 	settings: {
@@ -62,11 +63,45 @@ export function compileQueryRegex(
 	try {
 		return new RegExp(
 			query,
-			plugin.settings.filterMatchCase ? "" : "i"
+			plugin.settings.filterMatchCase ? "m" : "im"
 		);
 	} catch {
 		return null;
 	}
+}
+
+/** Use the native parser for regex searches, rather than filtering a literal search. */
+export function buildNativeRegexQuery(plugin: FilterHost, query: string): string {
+	if (!plugin.settings.filterUseRegex || !query.trim()) return query;
+	const source = compileQueryRegex(plugin, query)?.source ?? "(?!)";
+	return `/${source}/ OR path:/${source}/`;
+}
+
+/** Adapt only this floating view; keep the input and persisted query unmodified. */
+export function bindNativeRegexSearch(view: SearchView, plugin: FilterHost): () => void {
+	const target = view as SearchView & { startSearch: () => void };
+	const component = view.searchComponent;
+	if (typeof target.startSearch !== "function" || typeof component?.getValue !== "function") {
+		return () => {};
+	}
+	return around(target, {
+		startSearch(old) {
+			return function () {
+				const getValue = component.getValue;
+				// startSearch reads its query synchronously, before requesting layout saves.
+				// Restore on the first read so state/history always retain the user's input.
+				component.getValue = () => {
+					component.getValue = getValue;
+					return buildNativeRegexQuery(plugin, getValue.call(component));
+				};
+				try {
+					return old.call(this);
+				} finally {
+					component.getValue = getValue;
+				}
+			};
+		},
+	});
 }
 
 export function textMatches(
@@ -105,9 +140,7 @@ export function applyNativeResultFilters(
 	const bookmarks = plugin.settings.filterStarredOnly
 		? getBookmarkedPaths(plugin.app)
 		: null;
-	const query = (view.getState() as any)?.query ?? "";
-	const re = compileQueryRegex(plugin, query);
-	const dom = (view as any).dom;
+		const dom = (view as any).dom;
 	const children: any[] =
 		dom?.vChildren?._children ??
 		dom?.children ??
@@ -115,13 +148,7 @@ export function applyNativeResultFilters(
 
 	const applyToFile = (file: TFile | undefined, el: HTMLElement | undefined) => {
 		if (!file || !el) return;
-		let show = isFileAllowed(plugin, file, bookmarks);
-		if (show && re) {
-			show =
-				re.test(file.path) ||
-				re.test(file.basename) ||
-				re.test(el.textContent || "");
-		}
+		const show = isFileAllowed(plugin, file, bookmarks);
 		el.style.display = show ? "" : "none";
 	};
 
@@ -269,5 +296,9 @@ export function watchNativeSearchResults(
 		subtree: true,
 	});
 	run();
-	return () => observer.disconnect();
+	return () => {
+		observer.disconnect();
+		run.cancel();
+	};
 }
+
