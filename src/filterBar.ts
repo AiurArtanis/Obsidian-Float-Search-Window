@@ -85,13 +85,23 @@ export function buildNativeRegexQuery(plugin: FilterHost, query: string): string
 }
 
 /** Adapt only this floating view; keep the input and persisted query unmodified. */
-export function bindNativeRegexSearch(view: SearchView, plugin: FilterHost): () => void {
-	const target = view as SearchView & { startSearch: () => void };
-	const component = view.searchComponent;
+export function bindNativeRegexSearch(
+	view: SearchView,
+	plugin: FilterHost,
+	onQueryChange?: () => void
+): () => void {
+	const target = view as SearchView & {
+		startSearch: () => void;
+		stopSearch?: () => void;
+		infoEl?: HTMLElement;
+	};
+	const component = view.searchComponent as SearchView["searchComponent"] & {
+		changeCallback?: (value: string) => void;
+	};
 	if (typeof target.startSearch !== "function" || typeof component?.getValue !== "function") {
 		return () => {};
 	}
-	return around(target, {
+	const unpatch = around(target, {
 		startSearch(old) {
 			return function () {
 				const getValue = component.getValue;
@@ -109,6 +119,31 @@ export function bindNativeRegexSearch(view: SearchView, plugin: FilterHost): () 
 			};
 		},
 	});
+	// Native SearchView captures startSearch.bind(this) in its constructor.
+	// Replace only this component's callback so typing uses the live adapter too.
+	const originalChange = component.changeCallback;
+	const search = debounce(() => target.startSearch(), 0, true);
+	const onChange = (query: string) => {
+		onQueryChange?.();
+		view.dom?.setFocusedItem?.(null);
+		target.stopSearch?.();
+		search.cancel();
+		if (query) search();
+		else {
+			target.startSearch();
+			target.infoEl?.hide();
+		}
+	};
+	const canBindChange = typeof component.onChange === "function" &&
+		typeof originalChange === "function";
+	if (canBindChange) component.onChange(onChange);
+	return () => {
+		search.cancel();
+		if (canBindChange && component.changeCallback === onChange) {
+			component.onChange(originalChange);
+		}
+		unpatch();
+	};
 }
 
 export function textMatches(
@@ -131,9 +166,16 @@ export function matchAsSearchResult(
 	if (plugin.settings.filterUseRegex) {
 		const re = compileQueryRegex(plugin, query);
 		if (!re) return null;
-		const m = re.exec(text);
-		if (!m) return null;
-		return { score: 1, matches: [[m.index, m.index + m[0].length]] };
+		// Native search ignores zero-width matches and continues to the next one.
+		const scan = new RegExp(re.source, re.flags + "g");
+		let match: RegExpExecArray | null;
+		while ((match = scan.exec(text))) {
+			if (match[0].length) {
+				return { score: 1, matches: [[match.index, match.index + match[0].length]] };
+			}
+			scan.lastIndex++;
+		}
+		return null;
 	}
 	const idx = text.indexOf(query);
 	if (idx < 0) return null;

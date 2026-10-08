@@ -237,6 +237,7 @@ export default class FloatSearchPlugin extends Plugin {
 	onunload() {
 		// this.state = DEFAULT_SETTINGS.searchViewState;
 		this.modal?.close();
+		this.cmdkModal?.close();
 	}
 
 	registerDoubleKeyHandler() {
@@ -488,9 +489,7 @@ export default class FloatSearchPlugin extends Plugin {
 
 						const view = old.call(this, file, openState);
 						setTimeout(() => {
-							const fsCtnEl = (
-								this.parent.containerEl as HTMLElement
-							).parentElement;
+							const fsCtnEl = this.parent?.containerEl?.parentElement;
 							if (!fsCtnEl?.classList.contains("fs-content"))
 								return;
 							if (file.extension != "canvas") return;
@@ -1725,13 +1724,13 @@ class FloatSearchModal extends Modal {
 		this.searchLeaf.setPinned(true);
 		await this.searchLeaf.setViewState({
 			type: "search",
-			state: { ...this.state, triggerBySelf: true },
+			state: { ...this.state, matchingCase: this.plugin.settings.filterMatchCase, triggerBySelf: true },
 		});
 
 		setTimeout(async () => {
 			if (this.closed) return;
 			await this.searchLeaf.view.setState(
-				{ ...this.state, triggerBySelf: true },
+				{ ...this.state, matchingCase: this.plugin.settings.filterMatchCase, triggerBySelf: true },
 				{ history: false }
 			);
 			if (this.closed) return;
@@ -1758,7 +1757,10 @@ class FloatSearchModal extends Modal {
 			);
 		}
 		const view = this.searchLeaf.view as SearchView;
-		this.unbindNativeQuery = bindNativeRegexSearch(view, this.plugin);
+		this.unbindNativeQuery = bindNativeRegexSearch(view, this.plugin, () => {
+			this.debouncedAutoPreview.cancel();
+			this.clearPreview();
+		});
 		this.syncNativeMatchCase(view);
 		(view as SearchView & { startSearch?: () => void }).startSearch?.();
 		this.unwatchFilters = watchNativeSearchResults(view, this.plugin);
@@ -1773,15 +1775,19 @@ class FloatSearchModal extends Modal {
 	}
 
 	private syncNativeMatchCase(view: SearchView) {
-		const state = view.getState() as any;
+		const state = view.getState();
+		if (state.matchingCase === this.plugin.settings.filterMatchCase) return;
+		const target = view as SearchView & { setMatchingCase?: (value: boolean) => void };
+		if (typeof target.setMatchingCase === "function") {
+			target.setMatchingCase(this.plugin.settings.filterMatchCase);
+			return;
+		}
 		if (state.matchingCase !== this.plugin.settings.filterMatchCase) {
-			view.setState(
-				{
-					...state,
-					matchingCase: this.plugin.settings.filterMatchCase,
-				},
-				{ history: false }
-			);
+			view.setState({
+				...state,
+				matchingCase: this.plugin.settings.filterMatchCase,
+				triggerBySelf: true,
+			}, { history: false });
 		}
 	}
 
@@ -2660,6 +2666,7 @@ class FloatSearchCmdkModal extends SuggestModal<CmdkResult> {
 
 	async showPreview(result: CmdkResult) {
 		if (this.closed) return;
+		this.previewEl?.hide();
 		const request = ++this.previewRequest;
 		this.previewQueue = this.previewQueue.catch(() => {}).then(async () => {
 			if (this.closed || request !== this.previewRequest) return;
@@ -2682,13 +2689,14 @@ class FloatSearchCmdkModal extends SuggestModal<CmdkResult> {
 			this.fileLeaf.setPinned(true);
 		}
 
-		this.previewEl.show();
-		this.modalEl.addClass("float-search-cmdk-expanded");
+		this.previewEl.hide();
 
 		const file = result.file;
 		const leaf = this.fileLeaf!;
 		await leaf.openFile(file, { active: false });
 		if (this.closed || request !== this.previewRequest) return;
+		this.previewEl.show();
+		this.modalEl.addClass("float-search-cmdk-expanded");
 
 		const eState: Record<string, any> = {};
 		if (result.type === "heading" && result.heading) {

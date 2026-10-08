@@ -32,6 +32,17 @@ function parseNativeRegexQuery(query) {
   return [content.regex, filePath.regex];
 }
 
+function nativeNonemptyMatch(source, text, matchCase = false) {
+  const regex = new RegExp(source, matchCase ? 'gm' : 'gmi');
+  let match;
+  while ((match = regex.exec(text))) {
+    if (match[0].length > 0) return match;
+    // Obsidian discards zero-length search matches instead of showing them.
+    regex.lastIndex++;
+  }
+  return null;
+}
+
 for (const extension of ['canvas', 'base', 'pdf', 'md']) {
   test(`CMDK opens .${extension} through Obsidian's native file dispatcher`, async () => {
     const h = createHarness();
@@ -355,7 +366,7 @@ test('CMDK and native regex share case and multiline anchor semantics', () => {
       const native = parseNativeRegexQuery(h.filters.buildNativeRegexQuery(h.plugin, query));
       for (const sample of ['before\nneedle\nafter', 'before\nNEEDLE\nafter', 'folder/note', 'needles', 'invalid[']) {
         // Obsidian's native regex matcher uses gm/gmi; compare observable matches.
-        const nativeMatches = native.some((regex) => new RegExp(regex.source, matchCase ? 'gm' : 'gmi').test(sample));
+        const nativeMatches = native.some((regex) => nativeNonemptyMatch(regex.source, sample, matchCase) !== null);
         assert.equal(h.filters.textMatches(h.plugin, sample, query), nativeMatches,
           `Mode mismatch for ${JSON.stringify({ matchCase, query, sample })}`);
       }
@@ -391,4 +402,283 @@ test('native result filtering still enforces file-type and bookmark restrictions
   h.app.internalPlugins = { getEnabledPluginById: () => ({ getBookmarks: () => [{ type: 'file', path: 'board.canvas' }] }) };
   h.filters.applyNativeResultFilters(view, h.plugin);
   assert.deepEqual(children.map((child) => child.el.style.display), ['none', '', 'none']);
+});
+
+function createNativeTypingView(h) {
+  const component = {
+    inputEl: new ElementStub(),
+    getValue() { return this.inputEl.value; },
+    onChange(callback) { this.changeCallback = callback; return this; },
+    onChanged() { this.changeCallback?.(this.getValue()); },
+  };
+  const view = {
+    searchComponent: component,
+    infoEl: new ElementStub(),
+    runs: [],
+    getState() { return { query: component.getValue() }; },
+    startSearch() {
+      const search = component.getValue();
+      this.runs.push({ search, saved: this.getState().query });
+    },
+  };
+  // Obsidian's SearchView constructor caches a bound startSearch before a plugin
+  // can patch the instance. TextComponent likewise binds onChanged early, but
+  // onChanged dynamically looks up changeCallback each time it is invoked.
+  const constructedStartSearch = view.startSearch.bind(view);
+  const constructedOnChanged = component.onChanged.bind(component);
+  let originalTimer;
+  component.onChange((query) => {
+    if (query) {
+      h.clock.clearTimeout(originalTimer);
+      originalTimer = h.clock.setTimeout(constructedStartSearch, 0);
+    } else {
+      view.startSearch();
+    }
+    view.infoEl.hide();
+  });
+  const originalCallback = component.changeCallback;
+  return { view, component, originalCallback, type(value) {
+    component.inputEl.value = value;
+    constructedOnChanged();
+  } };
+}
+
+test('typing through the constructor-bound native handler still submits compiled regex', async () => {
+  const h = createHarness();
+  h.plugin.settings.filterUseRegex = true;
+  const input = createNativeTypingView(h);
+  const cleanup = h.filters.bindNativeRegexSearch(input.view, h.plugin);
+  input.type('alpha|beta');
+  await h.clock.tick(0);
+  assert.equal(input.view.runs.length, 1);
+  assert.equal(input.view.runs[0].search, h.filters.buildNativeRegexQuery(h.plugin, 'alpha|beta'),
+    'Typing must not bypass the adapter through the native constructor\'s cached bound method');
+  assert.equal(input.view.runs[0].saved, 'alpha|beta');
+  input.type('folder/note');
+  await h.clock.tick(0);
+  assert.equal(input.view.runs[1].search, h.filters.buildNativeRegexQuery(h.plugin, 'folder/note'));
+  cleanup();
+});
+
+test('native adapter cleanup cancels pending typed search and restores the original callback', async () => {
+  const h = createHarness();
+  h.plugin.settings.filterUseRegex = true;
+  const input = createNativeTypingView(h);
+  const cleanup = h.filters.bindNativeRegexSearch(input.view, h.plugin);
+  input.type('pending|regex');
+  cleanup();
+  assert.equal(input.component.changeCallback, input.originalCallback);
+  await h.clock.tick(0);
+  assert.equal(input.view.runs.length, 0, 'Closing before a debounce fires must cancel the queued search');
+  input.type('normal-search');
+  await h.clock.tick(0);
+  assert.equal(input.view.runs.length, 1);
+  assert.equal(input.view.runs[0].search, 'normal-search', 'Original input behavior resumes after cleanup');
+});
+
+test('native adapter cleanup preserves a newer change callback installed by someone else', () => {
+  const h = createHarness();
+  const input = createNativeTypingView(h);
+  const cleanup = h.filters.bindNativeRegexSearch(input.view, h.plugin);
+  const replacement = () => {};
+  input.component.onChange(replacement);
+  cleanup();
+  assert.equal(input.component.changeCallback, replacement);
+});
+
+test('native clear-button callback clears preview and searches immediately without an input event', async () => {
+  const h = createHarness();
+  h.plugin.settings.filterUseRegex = true;
+  const input = createNativeTypingView(h);
+  let clearPreviewCount = 0;
+  const cleanup = h.filters.bindNativeRegexSearch(input.view, h.plugin, () => { clearPreviewCount++; });
+  // This follows TextComponent's clear-button onChanged route; no DOM input event.
+  input.type('');
+  assert.equal(clearPreviewCount, 1, 'The query-change hook must also run for programmatic clear');
+  assert.equal(input.view.runs.length, 1, 'Empty query search should be synchronous');
+  assert.equal(input.view.runs[0].search, '');
+  assert.equal(input.view.infoEl.hidden, true);
+  await h.clock.tick(0);
+  assert.equal(input.view.runs.length, 1);
+  cleanup();
+});
+
+test('plugin unload closes both the native search and CMDK modal', () => {
+  const h = createHarness();
+  const closed = [];
+  h.default.prototype.onunload.call({
+    modal: { close() { closed.push('native'); } },
+    cmdkModal: { close() { closed.push('cmdk'); } },
+  });
+  assert.deepEqual(closed.sort(), ['cmdk', 'native']);
+});
+
+test('CMDK discards zero-length regex matches exactly like native search', () => {
+  const h = createHarness();
+  h.plugin.settings.filterUseRegex = true;
+  for (const matchCase of [true, false]) {
+    h.plugin.settings.filterMatchCase = matchCase;
+    for (const query of ['^', '$', String.raw`\b`, '(?=needle)', 'a*', 'needle|$', '(?:|needle)']) {
+      for (const text of ['', 'baaa', 'needle', 'first\nneedle\nlast', 'BAAA']) {
+        const expected = nativeNonemptyMatch(query, text, matchCase);
+        const actual = h.filters.matchAsSearchResult(h.plugin, text, query);
+        assert.equal(actual !== null, expected !== null,
+          `Zero-width parity mismatch for ${JSON.stringify({ query, text, matchCase })}`);
+        if (expected) {
+          assert.equal(actual.matches[0][0], expected.index);
+          assert.equal(actual.matches[0][1], expected.index + expected[0].length);
+        }
+      }
+    }
+  }
+  h.plugin.settings.filterMatchCase = false;
+  const afterEmpty = h.filters.matchAsSearchResult(h.plugin, 'baaa', 'a*');
+  assert.deepEqual(Array.from(afterEmpty.matches[0]), [1, 4], 'Skip the empty match at zero and find the later nonempty run');
+  assert.equal(h.filters.matchAsSearchResult(h.plugin, 'needle', '^'), null);
+});
+
+test('native match-case synchronization uses its dedicated setter without resetting view state', () => {
+  const h = createHarness();
+  const modal = new h.FloatSearchModal(() => {}, h.plugin, { query: 'needle' });
+  const calls = [];
+  let matchingCase = false;
+  const view = {
+    getState: () => ({ query: 'needle', matchingCase }),
+    setMatchingCase(value) { calls.push(value); matchingCase = value; },
+    setState() { throw new Error('setState would trigger the existing modal-opening hook'); },
+  };
+  h.plugin.settings.filterMatchCase = true;
+  modal.syncNativeMatchCase(view);
+  assert.deepEqual(calls, [true]);
+  assert.equal(matchingCase, true);
+  modal.syncNativeMatchCase(view);
+  assert.deepEqual(calls, [true], 'An unchanged match-case setting needs no new setter call');
+  h.plugin.settings.filterMatchCase = false;
+  modal.syncNativeMatchCase(view);
+  assert.deepEqual(calls, [true, false]);
+});
+
+test('native initialization applies the filter match-case setting to initial and delayed state', async () => {
+  const h = createHarness();
+  h.plugin.settings.filterMatchCase = true;
+  const leaf = h.makeLeaf();
+  const delayed = [];
+  leaf.view.setState = async (state) => { delayed.push(state); };
+  h.leafModule.nextLeaf = leaf;
+  const modal = new h.FloatSearchModal(() => {}, h.plugin, { query: '^Needle$', matchingCase: false });
+  await modal.initSearchView(new ElementStub());
+  assert.equal(leaf.viewStates[0].state.matchingCase, true);
+  assert.equal(leaf.viewStates[0].state.query, '^Needle$');
+  await h.clock.tick(0);
+  assert.equal(delayed[0].matchingCase, true);
+  assert.equal(delayed[0].query, '^Needle$');
+});
+
+test('clearing native search cancels an earlier typed debounce', async () => {
+  const h = createHarness();
+  const input = createNativeTypingView(h);
+  let cleared = 0;
+  const cleanup = h.filters.bindNativeRegexSearch(input.view, h.plugin, () => { cleared++; });
+  input.type('waiting');
+  input.type('');
+  assert.equal(cleared, 2);
+  assert.equal(input.view.runs.length, 1);
+  assert.equal(input.view.runs[0].search, '');
+  await h.clock.tick(0);
+  assert.equal(input.view.runs.length, 1, 'The cancelled typed query must not run after the clear action');
+  cleanup();
+});
+
+test('native match-case fallback state marks the update as plugin-originated', () => {
+  const h = createHarness();
+  h.plugin.settings.filterMatchCase = true;
+  const modal = new h.FloatSearchModal(() => {}, h.plugin, { query: 'needle' });
+  const updates = [];
+  const view = {
+    getState: () => ({ query: 'needle', matchingCase: false }),
+    setState(state) { updates.push(state); },
+  };
+  modal.syncNativeMatchCase(view);
+  assert.equal(updates.length, 1);
+  assert.equal(updates[0].matchingCase, true);
+  assert.equal(updates[0].triggerBySelf, true, 'The legacy fallback must not reopen the floating modal');
+  assert.equal(updates[0].query, 'needle');
+});
+
+test('native modal wires clear-button changes to preview cleanup and clears old result focus', async () => {
+  const h = createHarness();
+  const input = createNativeTypingView(h);
+  input.view.containerEl = new ElementStub();
+  input.view.dom = { focusedItem: null, setFocusedItem(item) { this.focusedItem = item; } };
+  input.view.setMatchingCase = () => {};
+  const modal = new h.FloatSearchModal(() => {}, h.plugin, { query: 'needle' });
+  modal.searchLeaf = h.makeLeaf();
+  modal.searchLeaf.view = input.view;
+  modal.searchCtnEl = new ElementStub();
+  modal.searchEmbeddedView = { unload() {} };
+  modal.initFilterBar();
+  const file = new h.TFile('previous.md');
+  await modal.initFileView(file, undefined);
+  const previewLeaf = h.spawned[0].leaf;
+  input.view.dom.focusedItem = { file };
+  modal.debouncedAutoPreview();
+  input.type('');
+  assert.equal(previewLeaf.detached, true, 'Programmatic clearing must detach the existing preview');
+  assert.equal(input.view.dom.focusedItem, null, 'A new query cannot retain a selectable stale result');
+  await h.clock.tick(250);
+  assert.equal(h.spawned.length, 1, 'Cancelled auto-preview must not recreate a stale preview');
+  assert.deepEqual(h.clock.errors, []);
+  modal.onClose();
+});
+
+for (const reusePreview of [false, true]) {
+  test(`CMDK keeps ${reusePreview ? 'an existing' : 'a new'} preview hidden until openFile finishes`, async () => {
+    const h = createHarness();
+    const modal = new h.FloatSearchCmdkModal(h.plugin);
+    modal.onOpen();
+    let leaf;
+    if (reusePreview) {
+      await modal.showPreview({ type: 'file', file: new h.TFile('old.md') });
+      leaf = h.spawned[0].leaf;
+      assert.equal(modal.previewEl.hidden, false);
+    } else {
+      leaf = h.makeLeaf();
+      h.leafModule.nextLeaf = leaf;
+    }
+    const pending = deferred();
+    let started = false;
+    leaf.openFile = () => { started = true; return pending.promise; };
+    const loading = modal.showPreview({ type: 'file', file: new h.TFile('new.md') });
+    if (reusePreview) assert.equal(modal.previewEl.hidden, true, 'Hide the old content as soon as the new selection starts');
+    await h.clock.microtasks();
+    assert.equal(started, true);
+    assert.equal(modal.previewEl.hidden, true, 'Loading must not reveal the old file or an unfinished preview');
+    pending.resolve();
+    await loading;
+    assert.equal(modal.previewEl.hidden, false);
+    assert.equal(modal.modalEl.hasClass('float-search-cmdk-expanded'), true);
+  });
+}
+
+test('a preview invalidated by an empty result set never becomes visible when its read finishes', async () => {
+  const h = createHarness();
+  const modal = new h.FloatSearchCmdkModal(h.plugin);
+  modal.onOpen();
+  const leaf = h.makeLeaf();
+  const pending = deferred();
+  leaf.openFile = () => pending.promise;
+  h.leafModule.nextLeaf = leaf;
+  const loading = modal.showPreview({ type: 'file', file: new h.TFile('late.md') });
+  await h.clock.microtasks();
+  const previewEl = modal.previewEl;
+  let lateShows = 0;
+  const originalShow = previewEl.show.bind(previewEl);
+  previewEl.show = () => { lateShows++; originalShow(); };
+  modal.inputEl.value = 'no-results';
+  modal.updateSuggestions();
+  pending.resolve();
+  await loading;
+  assert.equal(lateShows, 0);
+  assert.equal(previewEl.hidden, true);
+  assert.equal(modal.modalEl.hasClass('float-search-cmdk-expanded'), false);
 });

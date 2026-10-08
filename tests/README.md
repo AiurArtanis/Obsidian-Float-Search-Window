@@ -16,7 +16,10 @@ Coverage includes native file dispatch, heading and line destinations, new-tab
 selection, empty-result preview cleanup, late content reads, preview races,
 modal closure during initialization and file opens, native regex query escaping,
 invalid patterns, adapter cleanup, raw-query persistence, multiline/case parity,
-and file-type/bookmark filtering.
+and file-type/bookmark filtering. Native typing tests reproduce the constructor's
+pre-bound search handler and TextComponent callback dispatch, including clear
+buttons, debounce cancellation, callback restoration and plugin unload. Regex
+parity also covers the native engine's exclusion of zero-length matches.
 
 Timers and deferred promises make cancellation tests deterministic: each pending
 operation is started, interrupted, and then resolved. These are behavioral unit
