@@ -3,21 +3,24 @@ const assert = require('node:assert/strict');
 const { createHarness, deferred, ElementStub } = require('./harness.cjs');
 
 function parseNativeRegexQuery(query) {
-  // A small parser for the intended Obsidian content-regex OR path-regex query.
-  // Unlike splitting on '/', this also validates escaped slash delimiters.
+  // Obsidian's native query tokenizer ends a literal at any unescaped slash,
+  // including a slash inside a character class. Mirror that delimiter behavior.
   function takeLiteral(input) {
     assert.equal(input[0], '/', 'A native regex must start with a slash');
-    let escaped = false;
-    let characterClass = false;
+    let source = '';
     for (let index = 1; index < input.length; index++) {
-      if (escaped) { escaped = false; continue; }
-      if (input[index] === '\\') { escaped = true; continue; }
-      if (input[index] === '[') { characterClass = true; continue; }
-      if (input[index] === ']') { characterClass = false; continue; }
-      if (input[index] === '/' && !characterClass) {
-        const literal = input.slice(0, index + 1);
-        return { regex: require('node:vm').runInNewContext(literal), rest: input.slice(index + 1) };
+      if (input[index] === '\\') {
+        const next = input[++index];
+        assert.notEqual(next, undefined, 'A regex cannot end in a dangling escape');
+        // Native search removes delimiter escapes but preserves regex escapes,
+        // including paired backslashes, before constructing RegExp.
+        source += next === '/' ? '/' : '\\' + next;
+        continue;
       }
+      if (input[index] === '/') {
+        return { regex: new RegExp(source), rest: input.slice(index + 1) };
+      }
+      source += input[index];
     }
     assert.fail('Missing closing regex delimiter');
   }
@@ -153,13 +156,22 @@ test('native regex helper submits a real regex and safely escapes slash delimite
   const h = createHarness();
   h.plugin.settings.filterUseRegex = true;
   assert.equal(typeof h.filters.buildNativeRegexQuery, 'function');
-  for (const query of ['alpha|beta', 'folder/note', String.raw`folder\/note`, '[a-z]+', '[/]',
+  for (const query of ['alpha|beta', 'folder/note', String.raw`folder\/note`, '[a-z]+', '[/]', '[//]',
+    String.raw`\/`, String.raw`\\/`, String.raw`[\/]`, 'folder/subfolder/note',
     'foo/ OR path:/bar', 'first\nsecond', '']) {
     const nativeQuery = h.filters.buildNativeRegexQuery(h.plugin, query);
     if (!query) { assert.equal(nativeQuery, ''); continue; }
     const compiled = parseNativeRegexQuery(nativeQuery);
     for (const regex of compiled) {
-      assert.equal(regex.source, new RegExp(query).source, 'Native and CMDK patterns must retain the same meaning');
+      // Escaping a slash inside a character class changes .source but not meaning.
+      // Compare actual matching, including literal backslashes next to slashes.
+      for (const sample of ['alpha', 'beta', 'folder/note', 'folder/subfolder/note', '/', '//',
+        '\\/', 'foo/ OR path:/bar', 'first\nsecond', '[a-z]+', query]) {
+        const expected = new RegExp(query).exec(sample);
+        const actual = regex.exec(sample);
+        assert.equal(actual?.[0], expected?.[0], `Match mismatch for ${JSON.stringify({ query, sample })}`);
+        assert.equal(actual?.index, expected?.index, `Offset mismatch for ${JSON.stringify({ query, sample })}`);
+      }
     }
   }
 });
