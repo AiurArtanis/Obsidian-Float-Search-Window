@@ -8,10 +8,13 @@ function parseNativeRegexQuery(query) {
   function takeLiteral(input) {
     assert.equal(input[0], '/', 'A native regex must start with a slash');
     let escaped = false;
+    let characterClass = false;
     for (let index = 1; index < input.length; index++) {
       if (escaped) { escaped = false; continue; }
       if (input[index] === '\\') { escaped = true; continue; }
-      if (input[index] === '/') {
+      if (input[index] === '[') { characterClass = true; continue; }
+      if (input[index] === ']') { characterClass = false; continue; }
+      if (input[index] === '/' && !characterClass) {
         const literal = input.slice(0, index + 1);
         return { regex: require('node:vm').runInNewContext(literal), rest: input.slice(index + 1) };
       }
@@ -150,7 +153,8 @@ test('native regex helper submits a real regex and safely escapes slash delimite
   const h = createHarness();
   h.plugin.settings.filterUseRegex = true;
   assert.equal(typeof h.filters.buildNativeRegexQuery, 'function');
-  for (const query of ['alpha|beta', 'folder/note', String.raw`folder\/note`, '[a-z]+', '']) {
+  for (const query of ['alpha|beta', 'folder/note', String.raw`folder\/note`, '[a-z]+', '[/]',
+    'foo/ OR path:/bar', 'first\nsecond', '']) {
     const nativeQuery = h.filters.buildNativeRegexQuery(h.plugin, query);
     if (!query) { assert.equal(nativeQuery, ''); continue; }
     const compiled = parseNativeRegexQuery(nativeQuery);
@@ -298,10 +302,13 @@ test('native regex adapter transforms the search query but preserves input and s
   view.startSearch();
   assert.equal(runs[1].search, h.filters.buildNativeRegexQuery(h.plugin, rawQuery));
   assert.equal(runs[1].saved, rawQuery);
+  h.plugin.settings.filterUseRegex = false;
+  view.startSearch();
+  assert.equal(runs[2].search, rawQuery, 'Disabling regex must immediately restore ordinary native query syntax');
   cleanup();
   view.startSearch();
-  assert.equal(runs[2].search, rawQuery, 'Unloading the modal must restore native search behavior');
-  assert.equal(runs[2].saved, rawQuery);
+  assert.equal(runs[3].search, rawQuery, 'Unloading the modal must restore native search behavior');
+  assert.equal(runs[3].saved, rawQuery);
 });
 
 test('native regex adapter restores getValue even when startSearch throws', () => {
@@ -342,4 +349,34 @@ test('CMDK and native regex share case and multiline anchor semantics', () => {
       }
     }
   }
+});
+
+test('native result filtering preserves engine matches hidden by collapsed snippets', () => {
+  const h = createHarness();
+  h.plugin.settings.filterUseRegex = true;
+  const el = new ElementStub();
+  el.textContent = 'A collapsed result with no visible matching line';
+  const view = {
+    getState: () => ({ query: '^needle$' }),
+    dom: { vChildren: { _children: [{ file: new h.TFile('ordinary.md'), el }] } },
+  };
+  h.filters.applyNativeResultFilters(view, h.plugin);
+  assert.equal(el.style.display, '', 'Let the native engine decide regex matches instead of rechecking rendered snippets');
+});
+
+test('native result filtering still enforces file-type and bookmark restrictions', () => {
+  const h = createHarness();
+  const files = ['ordinary.md', 'board.canvas', 'table.base'].map((name) => new h.TFile(name));
+  const children = files.map((file) => ({ file, el: new ElementStub() }));
+  const view = { getState: () => ({ query: '' }), dom: { vChildren: { _children: children } } };
+  h.plugin.settings.filterIncludeBases = false;
+  h.plugin.settings.filterIncludeCanvas = false;
+  h.filters.applyNativeResultFilters(view, h.plugin);
+  assert.deepEqual(children.map((child) => child.el.style.display), ['', 'none', 'none']);
+  h.plugin.settings.filterIncludeBases = true;
+  h.plugin.settings.filterIncludeCanvas = true;
+  h.plugin.settings.filterStarredOnly = true;
+  h.app.internalPlugins = { getEnabledPluginById: () => ({ getBookmarks: () => [{ type: 'file', path: 'board.canvas' }] }) };
+  h.filters.applyNativeResultFilters(view, h.plugin);
+  assert.deepEqual(children.map((child) => child.el.style.display), ['none', '', 'none']);
 });

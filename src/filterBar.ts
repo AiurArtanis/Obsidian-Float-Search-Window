@@ -74,7 +74,14 @@ export function compileQueryRegex(
 export function buildNativeRegexQuery(plugin: FilterHost, query: string): string {
 	if (!plugin.settings.filterUseRegex || !query.trim()) return query;
 	const source = compileQueryRegex(plugin, query)?.source ?? "(?!)";
-	return `/${source}/ OR path:/${source}/`;
+	// Obsidian's query tokenizer treats every unescaped slash as a delimiter,
+	// including slashes inside character classes (which RegExp.source leaves raw).
+	const escaped = source.replace(/\//g, (_slash, offset: number) => {
+		let backslashes = 0;
+		for (let i = offset - 1; i >= 0 && source[i] === "\\"; i--) backslashes++;
+		return backslashes % 2 ? "/" : "\\/";
+	});
+	return `/${escaped}/ OR path:/${escaped}/`;
 }
 
 /** Adapt only this floating view; keep the input and persisted query unmodified. */
