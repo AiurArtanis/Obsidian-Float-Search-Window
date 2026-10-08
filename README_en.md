@@ -40,7 +40,7 @@ This repository is a fork of [Quorafind/Obsidian-Float-Search](https://github.co
 Floating search modal (public synthetic examples in dot-work, not real personal plans):
 
 <p align="center">
-  <img src="media/img.png" alt="Floating search modal screenshot" width="720">
+  <img src="media/img.jpg" alt="Floating search modal screenshot" width="720">
 </p>
 
 ## ✨ Features
@@ -70,13 +70,13 @@ Added on top of [Floating Search 4.3.0](https://github.com/Quorafind/Obsidian-Fl
 Filter row on the global search modal (dot-work example search):
 
 <p align="center">
-  <img src="media/filter-global.png" alt="Global search filter row" width="720">
+  <img src="media/filter-global.jpg" alt="Global search filter row" width="720">
 </p>
 
 The same row on the quick-search palette (double-tap Shift; dot-work example search):
 
 <p align="center">
-  <img src="media/filter-cmdk.png" alt="Quick search filter row" width="720">
+  <img src="media/filter-cmdk.jpg" alt="Quick search filter row" width="720">
 </p>
 
 ## 📦 Install

@@ -40,7 +40,7 @@
 浮动搜索弹窗（dot-work 中的公开合成样例，不对应真实个人行程）：
 
 <p align="center">
-  <img src="media/img.png" alt="浮动搜索弹窗截图" width="720">
+  <img src="media/img.jpg" alt="浮动搜索弹窗截图" width="720">
 </p>
 
 ## ✨ 功能
@@ -70,13 +70,13 @@
 全局搜索弹窗的过滤行（dot-work 样例搜索）：
 
 <p align="center">
-  <img src="media/filter-global.png" alt="全局搜索过滤行" width="720">
+  <img src="media/filter-global.jpg" alt="全局搜索过滤行" width="720">
 </p>
 
 快速浮窗（双击 Shift）同样有这一行（dot-work 样例搜索）：
 
 <p align="center">
-  <img src="media/filter-cmdk.png" alt="快速搜索过滤行" width="720">
+  <img src="media/filter-cmdk.jpg" alt="快速搜索过滤行" width="720">
 </p>
 
 ## 📦 安装
