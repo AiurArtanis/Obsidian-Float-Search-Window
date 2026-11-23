@@ -11,8 +11,12 @@ import { around } from "monkey-around";
 
 export interface FilterHost {
 	settings: {
+		filterIncludeNotes: boolean;
 		filterIncludeBases: boolean;
 		filterIncludeCanvas: boolean;
+		filterIncludeExcalidraw: boolean;
+		filterIncludePdf: boolean;
+		filterIncludeImages: boolean;
 		filterStarredOnly: boolean;
 		filterMatchCase: boolean;
 		filterUseRegex: boolean;
@@ -44,15 +48,51 @@ export function getBookmarkedPaths(app: App): Set<string> {
 	return paths;
 }
 
+export function isExcalidrawFile(app: App, file: TFile): boolean {
+	const ext = file.extension.toLowerCase();
+	if (ext === "excalidraw") return true;
+	if (file.path.toLowerCase().endsWith(".excalidraw.md")) return true;
+	const fm = app.metadataCache.getFileCache(file)?.frontmatter;
+	if (!fm) return false;
+	return !!(
+		fm["excalidraw-plugin"] ||
+		fm.excalidraw ||
+		(typeof fm.tags === "string" && fm.tags.includes("excalidraw")) ||
+		(Array.isArray(fm.tags) &&
+			fm.tags.some((t) => String(t).toLowerCase().includes("excalidraw")))
+	);
+}
+
+const IMAGE_EXTS = new Set([
+	"png",
+	"jpg",
+	"jpeg",
+	"gif",
+	"webp",
+	"svg",
+	"bmp",
+	"ico",
+	"avif",
+	"tif",
+	"tiff",
+]);
+
 export function isFileAllowed(
 	plugin: FilterHost,
 	file: TFile,
 	bookmarks: Set<string> | null
 ): boolean {
 	if (bookmarks && !bookmarks.has(file.path)) return false;
-	if (file.extension === "base") return plugin.settings.filterIncludeBases;
-	if (file.extension === "canvas") return plugin.settings.filterIncludeCanvas;
-	return true;
+	const ext = file.extension.toLowerCase();
+	if (isExcalidrawFile(plugin.app, file)) {
+		return plugin.settings.filterIncludeExcalidraw;
+	}
+	if (ext === "md") return plugin.settings.filterIncludeNotes;
+	if (ext === "base") return plugin.settings.filterIncludeBases;
+	if (ext === "canvas") return plugin.settings.filterIncludeCanvas;
+	if (ext === "pdf") return plugin.settings.filterIncludePdf;
+	if (IMAGE_EXTS.has(ext)) return plugin.settings.filterIncludeImages;
+	return false;
 }
 
 export function compileQueryRegex(
@@ -250,6 +290,13 @@ export function mountFilterBar(
 	};
 
 	addCheck(
+		s.filterNotes,
+		() => plugin.settings.filterIncludeNotes,
+		(v) => {
+			plugin.settings.filterIncludeNotes = v;
+		}
+	);
+	addCheck(
 		s.filterBases,
 		() => plugin.settings.filterIncludeBases,
 		(v) => {
@@ -261,6 +308,27 @@ export function mountFilterBar(
 		() => plugin.settings.filterIncludeCanvas,
 		(v) => {
 			plugin.settings.filterIncludeCanvas = v;
+		}
+	);
+	addCheck(
+		s.filterExcalidraw,
+		() => plugin.settings.filterIncludeExcalidraw,
+		(v) => {
+			plugin.settings.filterIncludeExcalidraw = v;
+		}
+	);
+	addCheck(
+		s.filterPdf,
+		() => plugin.settings.filterIncludePdf,
+		(v) => {
+			plugin.settings.filterIncludePdf = v;
+		}
+	);
+	addCheck(
+		s.filterImages,
+		() => plugin.settings.filterIncludeImages,
+		(v) => {
+			plugin.settings.filterIncludeImages = v;
 		}
 	);
 

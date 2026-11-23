@@ -20,6 +20,7 @@ import {
 } from "obsidian";
 import type { OpenViewState } from "src/types/types-obsidian";
 import type FloatSearchPlugin from "src/floatSearchIndex";
+import { isPreviewSuppressed } from "./openFile";
 
 
 export interface EmbeddedViewParent {
@@ -532,7 +533,9 @@ export class EmbeddedView extends nosuper(HoverPopover) {
 			this.opening = false;
 			if (this.detaching) this.hide();
 		}
-		if (!this.detaching) this.plugin.app.workspace.setActiveLeaf(leaf);
+		if (!this.detaching && !isPreviewSuppressed(file.path)) {
+			this.plugin.app.workspace.setActiveLeaf(leaf);
+		}
 
 		return leaf;
 	}

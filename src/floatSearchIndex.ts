@@ -39,6 +39,12 @@ import {
 	mountFilterBar,
 	watchNativeSearchResults,
 } from "./filterBar";
+import {
+	isPreviewSuppressed,
+	openVaultFile,
+	setPreviewFile,
+	usesMarkdownView,
+} from "./openFile";
 
 type sortOrder =
 	| "alphabetical"
@@ -77,8 +83,12 @@ interface FloatSearchSettings {
 	cmdkQuickCreate: boolean;
 	cmdkQuickCreateFolder: string;
 	cmdkQuickCreateTitleFormat: string;
+	filterIncludeNotes: boolean;
 	filterIncludeBases: boolean;
 	filterIncludeCanvas: boolean;
+	filterIncludeExcalidraw: boolean;
+	filterIncludePdf: boolean;
+	filterIncludeImages: boolean;
 	filterStarredOnly: boolean;
 	filterMatchCase: boolean;
 	filterUseRegex: boolean;
@@ -101,8 +111,12 @@ const DEFAULT_SETTINGS: FloatSearchSettings = {
 	cmdkQuickCreate: false,
 	cmdkQuickCreateFolder: "",
 	cmdkQuickCreateTitleFormat: "YYYYMMDDHHmmss",
+	filterIncludeNotes: true,
 	filterIncludeBases: true,
 	filterIncludeCanvas: true,
+	filterIncludeExcalidraw: true,
+	filterIncludePdf: true,
+	filterIncludeImages: true,
 	filterStarredOnly: false,
 	filterMatchCase: false,
 	filterUseRegex: false,
@@ -200,6 +214,14 @@ export default class FloatSearchPlugin extends Plugin {
 
 			this.patchWorkspace();
 			this.patchWorkspaceLeaf();
+			this.hookRecentFilesPlugin();
+			this.hookFileExplorer();
+			this.registerEvent(
+				this.app.workspace.on("layout-change", () => {
+					this.hookRecentFilesPlugin();
+					this.hookFileExplorer();
+				})
+			);
 			this.patchSearchView();
 			this.patchVchildren();
 			this.patchDragManager();
@@ -234,7 +256,75 @@ export default class FloatSearchPlugin extends Plugin {
 		this.addSettingTab(new FloatSearchSettingTab(this.app, this));
 	}
 
+	private recentFilesHooked = false;
+	private fileExplorerHooked = false;
+
+	hookRecentFilesPlugin() {
+		if (this.recentFilesHooked) return;
+		const recent = this.app.plugins.plugins["recent-files-obsidian"] as
+			| { shouldAddFile?: (file: TFile) => boolean; update?: (file: TFile) => void }
+			| undefined;
+		if (!recent) return;
+		this.recentFilesHooked = true;
+		if (typeof recent.shouldAddFile === "function") {
+			this.register(
+				around(recent, {
+					shouldAddFile(old: (file: TFile) => boolean) {
+						return function (file: TFile) {
+							if (file && isPreviewSuppressed(file.path)) {
+								return false;
+							}
+							const active = this.app?.workspace?.activeLeaf;
+							if (active && isEmebeddedLeaf(active)) {
+								return false;
+							}
+							return old.call(this, file);
+						};
+					},
+				} as any)
+			);
+		}
+		if (typeof recent.update === "function") {
+			this.register(
+				around(recent, {
+					update(old: (file: TFile) => void) {
+						return function (file: TFile) {
+							if (file && isPreviewSuppressed(file.path)) {
+								return;
+							}
+							return old.call(this, file);
+						};
+					},
+				} as any)
+			);
+		}
+	}
+
+	hookFileExplorer() {
+		if (this.fileExplorerHooked) return;
+		const leaf = this.app.workspace.getLeavesOfType("file-explorer")[0];
+		const view = leaf?.view as any;
+		if (!view?.revealInFolder) return;
+		this.fileExplorerHooked = true;
+		this.register(
+			around(Object.getPrototypeOf(view), {
+				revealInFolder(old: (file: TAbstractFile) => void) {
+					return function (file: TAbstractFile) {
+						if (
+							file instanceof TFile &&
+							isPreviewSuppressed(file.path)
+						) {
+							return;
+						}
+						return old.call(this, file);
+					};
+				},
+			} as any)
+		);
+	}
+
 	onunload() {
+		setPreviewFile(null);
 		// this.state = DEFAULT_SETTINGS.searchViewState;
 		this.modal?.close();
 		this.cmdkModal?.close();
@@ -426,6 +516,19 @@ export default class FloatSearchPlugin extends Plugin {
 					return old.call(this, leaf, id, ...args);
 				};
 			},
+			recordMostRecentOpenedFile(old: any) {
+				return function (file: TFile) {
+					if (
+						file &&
+						(isPreviewSuppressed(file.path) ||
+							(this.activeLeaf &&
+								isEmebeddedLeaf(this.activeLeaf)))
+					) {
+						return;
+					}
+					return old.call(this, file);
+				};
+			},
 		});
 		this.register(uninstaller);
 	}
@@ -451,42 +554,6 @@ export default class FloatSearchPlugin extends Plugin {
 				},
 				openFile(old) {
 					return function (file: TFile, openState?: OpenViewState) {
-						if (isEmebeddedLeaf(this)) {
-							setTimeout(
-								around(Workspace.prototype, {
-									recordMostRecentOpenedFile(old) {
-										return function (_file: TFile) {
-											// Don't update the quick switcher's recent list
-											if (_file !== file) {
-												return old.call(this, _file);
-											}
-										};
-									},
-								}),
-								1
-							);
-							const recentFiles =
-								this.app.plugins.plugins[
-									"recent-files-obsidian"
-								];
-							if (recentFiles) {
-								setTimeout(
-									around(recentFiles, {
-										shouldAddFile(old) {
-											return function (_file: TFile) {
-												// Don't update the Recent Files plugin
-												return (
-													_file !== file &&
-													old.call(this, _file)
-												);
-											};
-										},
-									}),
-									1
-								);
-							}
-						}
-
 						const view = old.call(this, file, openState);
 						setTimeout(() => {
 							const fsCtnEl = this.parent?.containerEl?.parentElement;
@@ -1638,6 +1705,7 @@ class FloatSearchModal extends Modal {
 		this.unwatchFilters = null;
 		this.unbindNativeQuery?.();
 		this.unbindNativeQuery = null;
+		setPreviewFile(null);
 
 		if (this.searchLeaf) this.cb(this.searchLeaf.view.getState());
 
@@ -1810,7 +1878,7 @@ class FloatSearchModal extends Modal {
 			inputEl.onkeydown = null;
 		};
 		inputEl.focus();
-		inputEl.onkeydown = (e) => {
+		inputEl.onkeydown = async (e) => {
 			if (e.isComposing || e.key === "Process" || e.keyCode === 229) {
 				return;
 			}
@@ -1875,6 +1943,24 @@ class FloatSearchModal extends Modal {
 						this.plugin.app.workspace.openLinkText(real, "", true);
 						this.close();
 						break;
+					}
+					{
+						const item = currentView.dom.focusedItem;
+						const focusedFile =
+							item?.parent?.file instanceof TFile
+								? item.parent.file
+								: item?.file;
+						if (
+							focusedFile instanceof TFile &&
+							!usesMarkdownView(this.plugin.app, focusedFile)
+						) {
+							e.preventDefault();
+							await openVaultFile(this.plugin.app, focusedFile, {
+								newTab: Keymap.isModEvent(e),
+							});
+							if (e.altKey) this.close();
+							break;
+						}
 					}
 					currentView.onKeyEnterInFocus(e);
 					if (e.altKey && currentView.dom.focusedItem) {
@@ -1982,11 +2068,57 @@ class FloatSearchModal extends Modal {
 				}
 				: undefined;
 
-		this.initFileView(file, state);
+		this.initFileView(
+			file,
+			usesMarkdownView(this.plugin.app, file) ? state : undefined
+		);
+	}
+
+	private fileFromSearchClick(target: HTMLElement | null): TFile | null {
+		const view = this.searchLeaf.view as SearchView;
+		let el: HTMLElement | null = target;
+		while (el && !el.classList.contains("tree-item")) {
+			el = el.parentElement;
+		}
+		if (!el) return null;
+		const lookup = view.dom?.resultDomLookup as
+			| Map<TFile, { el?: HTMLElement }>
+			| undefined;
+		if (lookup) {
+			for (const [file, item] of lookup) {
+				if (item?.el && (item.el === el || el.contains(item.el) || item.el.contains(el))) {
+					return file;
+				}
+			}
+		}
+		const focused = view.dom?.focusedItem;
+		const focusedFile =
+			focused?.parent?.file instanceof TFile
+				? focused.parent.file
+				: focused?.file;
+		return focusedFile instanceof TFile ? focusedFile : null;
 	}
 
 	initContent() {
 		const { contentEl } = this;
+		contentEl.addEventListener(
+			"click",
+			(e) => {
+				if (!(this.searchCtnEl as Node).contains(e.target as Node)) {
+					return;
+				}
+				const file = this.fileFromSearchClick(e.target as HTMLElement);
+				if (!file || usesMarkdownView(this.plugin.app, file)) return;
+				e.preventDefault();
+				e.stopPropagation();
+				void openVaultFile(this.plugin.app, file, {
+					newTab: Keymap.isModEvent(e),
+				}).then(() => {
+					if (e.altKey || !this.fileLeaf) this.close();
+				});
+			},
+			true
+		);
 		contentEl.onclick = (e) => {
 			const resultElement = contentEl.getElementsByClassName(
 				"search-results-children"
@@ -2032,16 +2164,7 @@ class FloatSearchModal extends Modal {
 					}
 					if (!targetElement) return;
 
-					const fileInnerEl = targetElement?.getElementsByClassName(
-						"tree-item-inner"
-					)[0] as HTMLElement;
-					const innerText = fileInnerEl.innerText;
-					const file =
-						this.plugin.app.metadataCache.getFirstLinkpathDest(
-							innerText,
-							""
-						);
-
+					const file = this.fileFromSearchClick(targetElement);
 					if (file) {
 						const item = currentView.dom.resultDomLookup.get(file);
 						currentView.dom.setFocusedItem(item);
@@ -2081,34 +2204,21 @@ class FloatSearchModal extends Modal {
 
 	private async renderFileView(file: TFile, state: any, request: number) {
 		if (this.fileLeaf) {
-			await this.fileLeaf.openFile(file, {
+			await openVaultFile(this.plugin.app, file, {
+				leaf: this.fileLeaf,
 				active: false,
 				eState: state,
+				preview: true,
 			});
 			if (this.closed || request !== this.previewRequest) return;
 
-			if (
-				this.fileState?.match?.matches[0] ===
-					state?.match?.matches[0] &&
-				state &&
-				this.fileState
-			) {
-				setTimeout(() => {
-					if (!this.closed && request === this.previewRequest && this.fileLeaf) {
-						this.plugin.app.workspace.setActiveLeaf(this.fileLeaf, {
-							focus: true,
-						});
-					}
-				}, 0);
-			} else {
-				this.fileState = state;
-				setTimeout(() => {
-					if (this.closed || request !== this.previewRequest) return;
-					(
-						this.searchLeaf.view as SearchView
-					).searchComponent?.inputEl?.focus();
-				}, 0);
-			}
+			this.fileState = state;
+			setTimeout(() => {
+				if (this.closed || request !== this.previewRequest) return;
+				(
+					this.searchLeaf.view as SearchView
+				).searchComponent?.inputEl?.focus();
+			}, 0);
 
 			return;
 		}
@@ -2148,9 +2258,11 @@ class FloatSearchModal extends Modal {
 		this.fileEmbeddedView = embeddedView;
 
 		this.fileLeaf.setPinned(true);
-		await this.fileLeaf.openFile(file, {
+		await openVaultFile(this.plugin.app, file, {
+			leaf: this.fileLeaf,
 			active: false,
 			eState: state,
+			preview: true,
 		});
 		if (this.closed || request !== this.previewRequest) return;
 		this.fileState = state;
@@ -2248,17 +2360,9 @@ class FloatSearchCmdkModal extends SuggestModal<CmdkResult> {
 		const bookmarks = this.plugin.settings.filterStarredOnly
 			? getBookmarkedPaths(this.app)
 			: null;
-		const files = this.app.vault.getFiles().filter((f: TFile) => {
-			if (
-				f.extension !== "md" &&
-				f.extension !== "canvas" &&
-				f.extension !== "pdf" &&
-				f.extension !== "base"
-			) {
-				return false;
-			}
-			return isFileAllowed(this.plugin, f, bookmarks);
-		});
+		const files = this.app.vault.getFiles().filter((f: TFile) =>
+			isFileAllowed(this.plugin, f, bookmarks)
+		);
 
 		// Empty query — show recent files
 		if (!query.trim()) {
@@ -2564,11 +2668,6 @@ class FloatSearchCmdkModal extends SuggestModal<CmdkResult> {
 			return;
 		}
 
-		const leaf = Keymap.isModEvent(evt)
-			? this.app.workspace.getLeaf("tab")
-			: this.app.workspace.getMostRecentLeaf() ??
-				this.app.workspace.getLeaf();
-
 		const eState: Record<string, any> = {};
 		if (result.type === "heading" && result.heading) {
 			eState.subpath = "#" + result.heading;
@@ -2576,10 +2675,9 @@ class FloatSearchCmdkModal extends SuggestModal<CmdkResult> {
 			eState.line = result.line;
 		}
 
-		leaf.openFile(result.file, { active: true }).then(() => {
-			if (eState.subpath || eState.line != null) {
-				leaf.setEphemeralState(eState);
-			}
+		void openVaultFile(this.app, result.file, {
+			newTab: Keymap.isModEvent(evt),
+			eState,
 		});
 	}
 
@@ -2692,12 +2790,6 @@ class FloatSearchCmdkModal extends SuggestModal<CmdkResult> {
 		this.previewEl.hide();
 
 		const file = result.file;
-		const leaf = this.fileLeaf!;
-		await leaf.openFile(file, { active: false });
-		if (this.closed || request !== this.previewRequest) return;
-		this.previewEl.show();
-		this.modalEl.addClass("float-search-cmdk-expanded");
-
 		const eState: Record<string, any> = {};
 		if (result.type === "heading" && result.heading) {
 			eState.subpath = "#" + result.heading;
@@ -2705,9 +2797,18 @@ class FloatSearchCmdkModal extends SuggestModal<CmdkResult> {
 			eState.line = result.line;
 		}
 
+		await openVaultFile(this.app, file, {
+			leaf: this.fileLeaf!,
+			active: false,
+			eState,
+			preview: true,
+		});
+		if (this.closed || request !== this.previewRequest) return;
 		if (eState.subpath || eState.line != null) {
-			leaf.setEphemeralState(eState);
+			this.fileLeaf?.setEphemeralState(eState);
 		}
+		this.previewEl.show();
+		this.modalEl.addClass("float-search-cmdk-expanded");
 
 		this.inputEl.focus();
 	}
@@ -2718,6 +2819,7 @@ class FloatSearchCmdkModal extends SuggestModal<CmdkResult> {
 		this.searchAbort = null;
 		this.onSelectedChange.cancel();
 		this.hidePreview();
+		setPreviewFile(null);
 		this.fileLeaf?.detach();
 		this.fileEmbeddedView?.unload();
 		this.fileLeaf = undefined;

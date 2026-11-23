@@ -208,6 +208,7 @@ function createHarness() {
         if (id === './leafView') return leafModule;
         if (id === './i18n') return { strings: () => ({}) };
         if (id === './filterBar') return load('filterBar');
+        if (id === './openFile') return load('openFile');
         if (id === 'monkey-around') return require('monkey-around');
         throw new Error(`Unexpected dependency: ${id}`);
       },
@@ -227,6 +228,10 @@ function createHarness() {
   const app = {
     vault: { getFiles: () => [], cachedRead: async () => '', getAbstractFileByPath: () => null },
     metadataCache: { getFileCache: () => null },
+    viewRegistry: {
+      viewByType: {},
+      typeByExtension: { md: 'markdown', canvas: 'canvas', base: 'bases', pdf: 'pdf' },
+    },
     workspace: {
       getMostRecentLeaf: () => mainLeaf,
       getLeaf: () => mainLeaf,
@@ -237,8 +242,10 @@ function createHarness() {
   const plugin = {
     app,
     settings: {
-      showInstructions: false, filterIncludeBases: true, filterIncludeCanvas: true,
-      filterStarredOnly: false, filterMatchCase: false, filterUseRegex: false,
+      showInstructions: false, filterIncludeNotes: true, filterIncludeBases: true,
+      filterIncludeCanvas: true, filterIncludeExcalidraw: true, filterIncludePdf: true,
+      filterIncludeImages: true, filterStarredOnly: false, filterMatchCase: false,
+      filterUseRegex: false,
       cmdkQuickCreate: false,
     },
     async saveSettings() {},
