@@ -1,197 +1,101 @@
 import {
 	addIcon,
-	App,
 	Editor,
 	ExtraButtonComponent,
-	Keymap,
 	Menu,
 	MenuItem,
-	Modal,
 	ObsidianProtocolData,
 	OpenViewState,
 	PaneType,
 	Plugin,
-	renderResults,
-	SearchResult,
 	requireApiVersion,
 	SearchView,
-	setIcon,
-	PluginSettingTab,
 	Setting,
-	SuggestModal,
+	setIcon,
 	TAbstractFile,
 	TFile,
+	ViewStateResult,
 	Workspace,
 	WorkspaceContainer,
 	WorkspaceItem,
 	WorkspaceLeaf,
 } from "obsidian";
-import { EmbeddedView, isEmebeddedLeaf, spawnLeafView } from "./leafView";
+import { EmbeddedView, isEmebeddedLeaf } from "./leafView";
 import { around } from "monkey-around";
 import { debounce } from "obsidian";
 import { strings } from "./i18n";
-import {
-	applyNativeResultFilters,
-	bindNativeRegexSearch,
-	isFileAllowed,
-	getBookmarkedPaths,
-	matchAsSearchResult,
-	mountFilterBar,
-	watchNativeSearchResults,
-} from "./filterBar";
-import {
-	isPreviewSuppressed,
-	openVaultFile,
-	setPreviewFile,
-	usesMarkdownView,
-} from "./openFile";
+import { isPreviewSuppressed } from "./openFile";
 
-type sortOrder =
-	| "alphabetical"
-	| "alphabeticalReverse"
-	| "byModifiedTime"
-	| "byModifiedTimeReverse"
-	| "byCreatedTime"
-	| "byCreatedTimeReverse";
+import { FloatSearchModal } from "./floatSearchModal";
+import { FloatSearchCmdkModal } from "./floatSearchCmdk";
+import { FloatSearchSettingTab } from "./settingTab";
+import { DEFAULT_SETTINGS, allViews, FloatSearchSettings, searchState, searchType, sortOrder } from "./floatSearchTypes";
 
-type searchType = "modal" | "sidebar" | PaneType;
+import { getActiveLeaf } from "./activeLeaf";
+import { DoubleTapDetector } from "./doubleTap";
+import { attachNativeSearchPreview } from "./nativeSearchPreview";
+import { getWorkspaceSearchLeaves, initSearchViewWithLeaf, isSidebarLeaf, isPopoutLeaf, nativeSearchState, revealSearchLeaf } from "./searchLeaf";
 
-interface viewType {
-	type: searchType;
-	icon: string;
+interface ResultFileItem {
+	file?: TFile;
+	el?: HTMLElement;
+	containerEl?: HTMLElement;
+	pathEl?: HTMLElement;
 }
 
-interface searchState extends Record<string, unknown> {
-	collapseAll?: boolean;
-	explainSearch?: boolean;
-	extraContext?: boolean;
-	matchingCase?: boolean;
-	query: string;
-	sortOrder?: sortOrder;
-	current?: boolean;
+interface SearchViewInternals {
+	filterSectionToggleEl?: HTMLElement;
+	searchParamsContainerEl?: HTMLElement;
 }
 
-type CmdkTriggerKey = "Shift" | "Control" | "Alt" | "Meta" | "none";
-
-interface FloatSearchSettings {
-	searchViewState: searchState;
-	showFilePath: boolean;
-	showInstructions: boolean;
-	defaultViewType: searchType;
-	cmdkTriggerKey: CmdkTriggerKey;
-	cmdkDoubleTapInterval: number;
-	cmdkQuickCreate: boolean;
-	cmdkQuickCreateFolder: string;
-	cmdkQuickCreateTitleFormat: string;
-	filterIncludeNotes: boolean;
-	filterIncludeBases: boolean;
-	filterIncludeCanvas: boolean;
-	filterIncludeExcalidraw: boolean;
-	filterIncludePdf: boolean;
-	filterIncludeImages: boolean;
-	filterStarredOnly: boolean;
-	filterMatchCase: boolean;
-	filterUseRegex: boolean;
+interface WorkspacePatchTarget {
+	getLeaf(...args: Parameters<Workspace["getLeaf"]>): WorkspaceLeaf;
+	changeLayout(layout: unknown): Promise<void>;
+	iterateLeaves(arg1: unknown, arg2: unknown): boolean;
+	setActiveLeaf(leaf: WorkspaceLeaf | null, params?: unknown): void;
+	pushUndoHistory(leaf: WorkspaceLeaf, id: string, ...args: unknown[]): void;
+	recordMostRecentOpenedFile(file: TFile): void;
 }
 
-const DEFAULT_SETTINGS: FloatSearchSettings = {
-	searchViewState: {
-		collapseAll: false,
-		explainSearch: false,
-		extraContext: false,
-		matchingCase: false,
-		query: "",
-		sortOrder: "alphabetical",
-	},
-	showFilePath: false,
-	showInstructions: true,
-	defaultViewType: "modal",
-	cmdkTriggerKey: "Shift",
-	cmdkDoubleTapInterval: 300,
-	cmdkQuickCreate: false,
-	cmdkQuickCreateFolder: "",
-	cmdkQuickCreateTitleFormat: "YYYYMMDDHHmmss",
-	filterIncludeNotes: true,
-	filterIncludeBases: true,
-	filterIncludeCanvas: true,
-	filterIncludeExcalidraw: true,
-	filterIncludePdf: true,
-	filterIncludeImages: true,
-	filterStarredOnly: false,
-	filterMatchCase: false,
-	filterUseRegex: false,
-};
+interface RecentFileTracker {
+	onFileOpen(current: TFile | null, previous: TFile | null): void;
+}
 
-const allViews: viewType[] = [
-	{
-		type: "modal",
-		icon: "square-equal",
-	},
-	{
-		type: "sidebar",
-		icon: "panel-left-inactive",
-	},
-	{
-		type: "split",
-		icon: "split-square-horizontal",
-	},
-	{
-		type: "tab",
-		icon: "panel-top",
-	},
-	{
-		type: "window",
-		icon: "app-window",
-	},
-];
+interface WorkspaceRecentFileInternals {
+	recentFileTracker?: RecentFileTracker;
+	lastActiveFile: TFile | null;
+	getActiveFileView?(): { leaf: WorkspaceLeaf } | null;
+}
 
-const initSearchViewWithLeaf = async (
-	app: App,
-	type: PaneType | "sidebar",
-	state?: searchState
-) => {
-	const leaf =
-		type === "sidebar"
-			? app.workspace.getLeftLeaf(false)
-			: app.workspace.getLeaf(type);
-	leaf?.setPinned(type !== "sidebar");
-	await leaf?.setViewState({
-		type: "search",
-		active: true,
-		state: {
-			...DEFAULT_SETTINGS.searchViewState,
-			...state,
-			triggerBySelf: true,
-		},
-	});
-
-	setTimeout(() => {
-		const inputEl = leaf?.containerEl.getElementsByTagName("input")?.[0];
-		inputEl?.focus();
-	}, 0);
-};
+interface SearchViewPatchTarget {
+	onOpen(): Promise<void>;
+	setExplainSearch(value: boolean): void;
+	setCollapseAll(value: boolean): void;
+	setExtraContext(value: boolean): void;
+	setMatchingCase(value: boolean): void;
+	setSortOrder(value: string): void;
+	setQuery(value: string): void;
+	setState(state: searchState, result: ViewStateResult): Promise<void>;
+}
 
 export default class FloatSearchPlugin extends Plugin {
 	settings: FloatSearchSettings;
-	private state: searchState;
-	private modal: FloatSearchModal;
-	private cmdkModal: FloatSearchCmdkModal;
+	private state: searchState = { ...DEFAULT_SETTINGS.searchViewState };
+	private modal: FloatSearchModal | null = null;
+	private cmdkModal: FloatSearchCmdkModal | null = null;
 
-	allLoaded = false;
-	queryLoaded = false;
+	private queryLoaded = false;
+	private unloading = false;
+	private readonly searchViewCleanups = new Map<SearchView, () => void>();
 
-	patchedDomChildren = false;
 
 	public applySettingsUpdate = debounce(async () => {
-		if (!this.allLoaded) {
-			this.allLoaded = true;
-			return;
-		}
+		if (this.unloading) return;
 		// Ensure all searchState properties are preserved
 		this.settings.searchViewState = {
 			...DEFAULT_SETTINGS.searchViewState,
 			...this.settings.searchViewState,
-			query: this.state?.query || "",
+			query: this.state.query || "",
 		};
 		await this.saveSettings();
 	}, 1000);
@@ -207,9 +111,11 @@ export default class FloatSearchPlugin extends Plugin {
 
 	async onload() {
 		await this.loadSettings();
+		this.initState();
 
 		this.app.workspace.onLayoutReady(() => {
-			this.initState();
+			if (this.unloading) return;
+			this.updateFilePathVisibility();
 			this.registerIcons();
 
 			this.patchWorkspace();
@@ -223,7 +129,6 @@ export default class FloatSearchPlugin extends Plugin {
 				})
 			);
 			this.patchSearchView();
-			this.patchVchildren();
 			this.patchDragManager();
 			this.registerDoubleKeyHandler();
 		});
@@ -241,7 +146,7 @@ export default class FloatSearchPlugin extends Plugin {
 				if (this.settings.defaultViewType === "modal") {
 					this.initModal(this.state, true, true);
 				} else {
-					initSearchViewWithLeaf(
+					void initSearchViewWithLeaf(
 						this.app,
 						this.settings.defaultViewType,
 						{
@@ -253,6 +158,9 @@ export default class FloatSearchPlugin extends Plugin {
 			}
 		);
 		this.updateFilePathVisibility();
+		this.registerEvent(this.app.workspace.on("window-open", (_workspaceWindow, win) => {
+			this.applyFilePathVisibility(win.document);
+		}));
 		this.addSettingTab(new FloatSearchSettingTab(this.app, this));
 	}
 
@@ -261,27 +169,30 @@ export default class FloatSearchPlugin extends Plugin {
 
 	hookRecentFilesPlugin() {
 		if (this.recentFilesHooked) return;
-		const recent = this.app.plugins.plugins["recent-files-obsidian"] as
-			| { shouldAddFile?: (file: TFile) => boolean; update?: (file: TFile) => void }
-			| undefined;
+		type RecentFiles = {
+			app?: { workspace?: Workspace };
+			shouldAddFile(file: TFile): boolean;
+			update(file: TFile): void;
+		};
+		const recent = this.app.plugins.plugins["recent-files-obsidian"] as unknown as RecentFiles | undefined;
 		if (!recent) return;
 		this.recentFilesHooked = true;
 		if (typeof recent.shouldAddFile === "function") {
 			this.register(
 				around(recent, {
 					shouldAddFile(old: (file: TFile) => boolean) {
-						return function (file: TFile) {
+						return function (this: RecentFiles, file: TFile) {
 							if (file && isPreviewSuppressed(file.path)) {
 								return false;
 							}
-							const active = this.app?.workspace?.activeLeaf;
+							const active = this.app?.workspace ? getActiveLeaf(this.app.workspace) : null;
 							if (active && isEmebeddedLeaf(active)) {
 								return false;
 							}
 							return old.call(this, file);
 						};
 					},
-				} as any)
+				})
 			);
 		}
 		if (typeof recent.update === "function") {
@@ -295,7 +206,7 @@ export default class FloatSearchPlugin extends Plugin {
 							return old.call(this, file);
 						};
 					},
-				} as any)
+				})
 			);
 		}
 	}
@@ -303,11 +214,11 @@ export default class FloatSearchPlugin extends Plugin {
 	hookFileExplorer() {
 		if (this.fileExplorerHooked) return;
 		const leaf = this.app.workspace.getLeavesOfType("file-explorer")[0];
-		const view = leaf?.view as any;
+		const view = leaf?.view as { revealInFolder?(file: TAbstractFile): void } | undefined;
 		if (!view?.revealInFolder) return;
 		this.fileExplorerHooked = true;
 		this.register(
-			around(Object.getPrototypeOf(view), {
+			around(view.constructor.prototype as { revealInFolder(file: TAbstractFile): void }, {
 				revealInFolder(old: (file: TAbstractFile) => void) {
 					return function (file: TAbstractFile) {
 						if (
@@ -319,48 +230,38 @@ export default class FloatSearchPlugin extends Plugin {
 						return old.call(this, file);
 					};
 				},
-			} as any)
+			})
 		);
 	}
 
 	onunload() {
-		setPreviewFile(null);
-		// this.state = DEFAULT_SETTINGS.searchViewState;
+		this.unloading = true;
 		this.modal?.close();
 		this.cmdkModal?.close();
+		this.applySettingsUpdate.cancel();
+		this.applyStateUpdate.cancel();
+		for (const cleanup of this.searchViewCleanups.values()) cleanup();
+		for (const win of EmbeddedView.activeWindows(this)) {
+			win.document.body.removeClass("show-file-path");
+		}
 	}
 
 	registerDoubleKeyHandler() {
-		let lastKeyUp = 0;
-		let keyOnly = true;
-
-		this.registerDomEvent(document, "keydown", (e: KeyboardEvent) => {
-			const triggerKey = this.settings.cmdkTriggerKey;
-			if (triggerKey === "none" || e.key !== triggerKey) {
-				keyOnly = false;
-			}
-		});
-
-		this.registerDomEvent(document, "keyup", (e: KeyboardEvent) => {
-			const triggerKey = this.settings.cmdkTriggerKey;
-			if (triggerKey === "none") return;
-			if (e.key === triggerKey) {
-				const now = Date.now();
-				if (
-					keyOnly &&
-					now - lastKeyUp < this.settings.cmdkDoubleTapInterval &&
-					!document.querySelector(
-						".float-search-cmdk-container"
-					)
-				) {
-					lastKeyUp = 0;
-					this.openCmdkModal();
-				} else {
-					lastKeyUp = now;
-					keyOnly = true;
+		const attach = (win: Window) => {
+			const detector = new DoubleTapDetector(
+				() => this.settings.cmdkTriggerKey,
+				() => this.settings.cmdkDoubleTapInterval,
+				() => {
+					if (!win.document.querySelector(".float-search-cmdk-container")) this.openCmdkModal();
 				}
-			}
-		});
+			);
+			this.registerDomEvent(win, "keydown", detector.onKeyDown, { capture: true });
+			this.registerDomEvent(win, "keyup", detector.onKeyUp, { capture: true });
+			this.registerDomEvent(win, "mousedown", detector.reset, { capture: true });
+			this.registerDomEvent(win, "blur", detector.reset);
+		};
+		for (const win of EmbeddedView.activeWindows(this)) attach(win);
+		this.registerEvent(this.app.workspace.on("window-open", (_workspaceWindow, win) => attach(win)));
 	}
 
 	openCmdkModal() {
@@ -372,14 +273,17 @@ export default class FloatSearchPlugin extends Plugin {
 	}
 
 	updateFilePathVisibility() {
-		const { showFilePath } = this.settings;
-		document.body.toggleClass("show-file-path", showFilePath);
+		for (const win of EmbeddedView.activeWindows(this)) this.applyFilePathVisibility(win.document);
 	}
 
-	changeFilePathVisibility() {
-		this.settings.showFilePath = !this.settings.showFilePath;
-		this.updateFilePathVisibility();
-		this.applySettingsUpdate();
+	async updateSearchDefaults(update: Partial<searchState>) {
+		this.settings.searchViewState = { ...this.settings.searchViewState, ...update };
+		this.state = { ...this.state, ...update };
+		await this.saveSettings();
+	}
+
+	private applyFilePathVisibility(doc: Document) {
+		doc.body.toggleClass("show-file-path", this.settings.showFilePath);
 	}
 
 	initState() {
@@ -418,119 +322,134 @@ export default class FloatSearchPlugin extends Plugin {
 
 	patchWorkspace() {
 		let layoutChanging = false;
-		// Keep the plugin receiver across native method wrappers.
-		// eslint-disable-next-line @typescript-eslint/no-this-alias
-		const self = this;
-		const uninstaller = around(Workspace.prototype, {
-			getLeaf: (next) =>
-				function (...args) {
-					const activeLeaf = (this as Workspace).activeLeaf;
-					if (activeLeaf) {
-						// @ts-ignore
-						const fsCtnEl = (
-							activeLeaf.parent.containerEl as HTMLElement
-						).parentElement;
-						if (fsCtnEl?.hasClass("fs-content")) {
-							if (activeLeaf.view.getViewType() === "markdown") {
-								return activeLeaf;
-							}
-
-							const newLeaf =
-								self.app.workspace.getMostRecentLeaf();
-
-							if (newLeaf) {
-								this.setActiveLeaf(newLeaf);
-							}
-						}
-						return next.call(this, ...args);
+		const workspace = this.app.workspace;
+		const uninstaller = around(Workspace.prototype as unknown as WorkspacePatchTarget, {
+			getLeaf: (old) =>
+				function (this: Workspace, ...args: Parameters<Workspace["getLeaf"]>) {
+					const activeLeaf = getActiveLeaf(this);
+					if (activeLeaf && isEmebeddedLeaf(activeLeaf)) {
+						// Preserve implicit editor selection for links within a preview.
+						// An explicit new tab or window must escape the embedded view.
+						if (!args[0] && activeLeaf.view.getViewType() === "markdown") return activeLeaf;
+						const recent = workspace.getMostRecentLeaf(workspace.rootSplit);
+						if (recent && !isEmebeddedLeaf(recent)) this.setActiveLeaf(recent);
 					}
-					return next.call(this, ...args);
+					return old.call(this, ...args);
 				},
 			changeLayout(old) {
-				return async function (workspace: unknown) {
+				return async function (this: Workspace, layout) {
 					layoutChanging = true;
 					try {
-						// Don't consider hover popovers part of the workspace while it's changing
-						await old.call(this, workspace);
+						await old.call(this, layout);
 					} finally {
 						layoutChanging = false;
 					}
 				};
 			},
 			iterateLeaves(old) {
-				type leafIterator = (item: WorkspaceLeaf) => boolean | void;
-				return function (arg1, arg2) {
-					// Fast exit if desired leaf found
+				return function (this: Workspace, arg1, arg2) {
 					if (old.call(this, arg1, arg2)) return true;
-
-					// Handle old/new API parameter swap
-					const cb: leafIterator = (
-						typeof arg1 === "function" ? arg1 : arg2
-					) as leafIterator;
-					const parent: WorkspaceItem = (
-						typeof arg1 === "function" ? arg2 : arg1
-					) as WorkspaceItem;
-
-					if (!parent) return false; // <- during app startup, rootSplit can be null
-					if (layoutChanging) return false; // Don't let HEs close during workspace change
-
-					// 0.14.x doesn't have WorkspaceContainer; this can just be an instanceof check once 15.x is mandatory:
-
-					if (!requireApiVersion("0.15.0")) {
-						if (
-							parent === self.app.workspace.rootSplit ||
-							(WorkspaceContainer &&
-								parent instanceof WorkspaceContainer)
-						) {
-							for (const popover of EmbeddedView.popoversForWindow(
-								(parent as WorkspaceContainer).win
-							)) {
-								// Use old API here for compat w/0.14.x
-								if (old.call(this, cb, popover.rootSplit))
-									return false;
-							}
+					if (layoutChanging) return false;
+					const callbackFirst = typeof arg1 === "function";
+					const callback = callbackFirst ? arg1 : arg2;
+					const parent = (callbackFirst ? arg2 : arg1) as WorkspaceItem | undefined;
+					if (!parent || typeof callback !== "function") return false;
+					if (parent !== workspace.rootSplit &&
+						!(WorkspaceContainer && parent instanceof WorkspaceContainer)) return false;
+					const win = (parent as WorkspaceContainer).win ?? window;
+					for (const popover of EmbeddedView.popoversForWindow(win)) {
+						const split = popover.rootSplit;
+						if (callbackFirst ? old.call(this, callback, split) : old.call(this, split, callback)) {
+							return true;
 						}
 					}
 					return false;
 				};
 			},
 			setActiveLeaf(old) {
-				return function (leaf: any, params?: any) {
-					if (isEmebeddedLeaf(leaf)) {
-						old.call(this, leaf, params);
-						leaf.activeTime = 1700000000000;
-					}
-					return old.call(this, leaf, params);
+				return function (this: Workspace, leaf, params) {
+					old.call(this, leaf, params);
+					if (leaf && isEmebeddedLeaf(leaf)) leaf.activeTime = 1700000000000;
 				};
 			},
-			pushUndoHistory(old: any) {
-				return function (
-					leaf: WorkspaceLeaf,
-					id: string,
-					...args: any[]
-				) {
-					const viewState = leaf.getViewState();
-					if (viewState.type === "search") {
-						return;
-					}
+			pushUndoHistory(old) {
+				return function (this: Workspace, leaf, id, ...args) {
+					if (isEmebeddedLeaf(leaf) || leaf.getViewState().type === "search") return;
 					return old.call(this, leaf, id, ...args);
 				};
 			},
-			recordMostRecentOpenedFile(old: any) {
-				return function (file: TFile) {
-					if (
-						file &&
-						(isPreviewSuppressed(file.path) ||
-							(this.activeLeaf &&
-								isEmebeddedLeaf(this.activeLeaf)))
-					) {
-						return;
-					}
+			recordMostRecentOpenedFile(old) {
+				return function (this: Workspace, file) {
+					const active = getActiveLeaf(this);
+					if (file && (isPreviewSuppressed(file.path) || (active && isEmebeddedLeaf(active)))) return;
 					return old.call(this, file);
 				};
 			},
 		});
 		this.register(uninstaller);
+		this.patchPreviewFileTransitions(workspace);
+	}
+
+	private patchPreviewFileTransitions(workspace: Workspace) {
+		const internal = workspace as Workspace & WorkspaceRecentFileInternals;
+		const tracker = internal.recentFileTracker;
+		if (typeof tracker?.onFileOpen !== "function") return;
+
+		let workspaceFile = internal.lastActiveFile ?? workspace.getActiveFile();
+		let previewWasActive = false;
+		let suppressedFileOpen: TFile | null | undefined;
+		const isPreviewActive = () => {
+			const leaf = internal.getActiveFileView?.()?.leaf ?? getActiveLeaf(workspace);
+			return !!leaf && isEmebeddedLeaf(leaf);
+		};
+		const unpatch = around(tracker, {
+			onFileOpen(old) {
+				return function (this: RecentFileTracker, current, previous) {
+					suppressedFileOpen = undefined;
+					// Obsidian 1.15 records the outgoing file before emitting file-open for the incoming one.
+					if (isPreviewActive()) {
+						previewWasActive = true;
+						suppressedFileOpen = current;
+						return;
+					}
+					const outgoing = previewWasActive ? workspaceFile : previous;
+					if (previewWasActive && outgoing === current) suppressedFileOpen = current;
+					previewWasActive = false;
+					workspaceFile = current;
+					if (outgoing !== current) old.call(this, current, outgoing);
+				};
+			},
+		});
+		this.register(() => {
+			// A delayed workspace event can still run after Obsidian removes this patch.
+			if (previewWasActive) internal.lastActiveFile = workspaceFile;
+			unpatch();
+		});
+		this.register(around(workspace, {
+			trigger(old) {
+				return function (this: Workspace, name, ...data) {
+					if (name === "file-open") {
+						const suppressed = suppressedFileOpen;
+						suppressedFileOpen = undefined;
+						if (suppressed !== undefined && data[0] === suppressed) return;
+					}
+					old.call(this, name, ...data);
+				};
+			},
+		}));
+		this.registerEvent(workspace.on("active-leaf-change", () => {
+			if (!previewWasActive || isPreviewActive()) return;
+			const current = workspace.getActiveFile();
+			// Moving the previewed file into a real tab doesn't change Obsidian's file identity.
+			if (current !== internal.lastActiveFile) return;
+			const outgoing = workspaceFile;
+			previewWasActive = false;
+			workspaceFile = current;
+			if (current !== outgoing) {
+				tracker.onFileOpen(current, outgoing);
+				workspace.trigger("file-open", current);
+			}
+		}));
 	}
 
 	// Used for patch workspaceleaf pinned behaviors
@@ -538,7 +457,7 @@ export default class FloatSearchPlugin extends Plugin {
 		this.register(
 			around(WorkspaceLeaf.prototype, {
 				getRoot(old) {
-					return function () {
+					return function (this: WorkspaceLeaf) {
 						const top = old.call(this);
 						return top?.getRoot === this.getRoot
 							? top
@@ -546,433 +465,332 @@ export default class FloatSearchPlugin extends Plugin {
 					};
 				},
 				setPinned(old) {
-					return function (pinned: boolean) {
+					return function (this: WorkspaceLeaf, pinned: boolean) {
 						old.call(this, pinned);
 						if (isEmebeddedLeaf(this) && !pinned)
 							this.setPinned(true);
 					};
 				},
 				openFile(old) {
-					return function (file: TFile, openState?: OpenViewState) {
-						const view = old.call(this, file, openState);
-						setTimeout(() => {
-							const fsCtnEl = this.parent?.containerEl?.parentElement;
-							if (!fsCtnEl?.classList.contains("fs-content"))
-								return;
-							if (file.extension != "canvas") return;
-
-							const canvas = this.view.canvas;
-							setTimeout(() => {
-								if (canvas && openState?.eState?.match) {
-									let node = canvas.data.nodes?.find(
-										(e: any) =>
-											e.text ===
-											(openState?.eState as any)?.match
-												?.content
-									);
-									if (node) {
-										node = canvas.nodes.get(node.id);
-										canvas.selectOnly(node);
-										canvas.zoomToSelection();
-									}
-								}
-							}, 20);
-						}, 1);
-
-						return view;
+					return async function (this: WorkspaceLeaf, file: TFile, openState?: OpenViewState) {
+						await old.call(this, file, openState);
+						if (!isEmebeddedLeaf(this) || file.extension !== "canvas") return;
+						const { canvas } = this.view as unknown as { canvas?: {
+							data: { nodes?: { id: string; text?: string }[] };
+							nodes: Map<string, unknown>;
+							selectOnly(node: unknown): void;
+							zoomToSelection(): void;
+						} };
+						const match = openState?.eState?.match as { content?: string } | undefined;
+						if (!canvas || !match?.content) return;
+						const matchNode = canvas.data.nodes?.find((node) => node.text === match.content);
+						const node = matchNode && canvas.nodes.get(matchNode.id);
+						if (node) {
+							canvas.selectOnly(node);
+							canvas.zoomToSelection();
+						}
 					};
 				},
 			})
 		);
 	}
 
-	patchSearchView() {
-		const checkCurrentViewType = (leaf: WorkspaceLeaf) => {
-			const isModal =
-				document.querySelector(".float-search-modal") !== null;
-			const currentLeafRoot = leaf.getRoot();
-			if (
-				currentLeafRoot?.side &&
-				(currentLeafRoot?.side === "left" ||
-					currentLeafRoot?.side === "right")
-			)
-				return "sidebar";
-			if (leaf.getContainer()?.type === "window") return "window";
-			return isModal ? "modal" : "split";
-		};
+	setFilePathVisibility(value: boolean) {
+		this.settings.showFilePath = value;
+		this.updateFilePathVisibility();
+		void this.saveSettings();
+	}
 
-		const initViewMenu = (
-			menu: Menu,
-			current: searchType,
-			originLeaf?: WorkspaceLeaf
-		) => {
-			menu.dom.toggleClass("float-search-view-menu", true);
-			const availableViews = allViews.filter((view) => {
-				if (current === "split") {
-					return view.type !== "tab";
-				} else {
-					return view.type !== current;
-				}
+	private currentViewType(leaf: WorkspaceLeaf): searchType {
+		if (isEmebeddedLeaf(leaf)) return "modal";
+		if (isSidebarLeaf(leaf)) return "sidebar";
+		if (isPopoutLeaf(leaf)) return "window";
+		return "split";
+	}
+
+	private buildViewMenu(menu: Menu, current: searchType, originLeaf: WorkspaceLeaf) {
+		menu.dom.addClass("float-search-view-menu");
+		const availableViews = allViews.filter((view) =>
+			current === "split" ? view.type !== "tab" : view.type !== current
+		);
+		const stateOf = (): searchState => ({
+			...this.state,
+			...(originLeaf.view.getState() as Partial<searchState>),
+		});
+
+		for (const view of availableViews) {
+			menu.addItem((item: MenuItem) => {
+				item.setTitle(strings().viewTypeMenu(view.type))
+					.setIcon(view.icon)
+					.onClick(() => {
+						const state = stateOf();
+						if (current === "modal") this.modal?.close();
+						else originLeaf.detach();
+
+						window.setTimeout(() => {
+							if (this.unloading) return;
+							if (view.type === "modal") this.initModal(state, true, false);
+							else void initSearchViewWithLeaf(this.app, view.type, state);
+						}, 10);
+					});
 			});
-			for (const view of availableViews) {
-				menu.addItem((item: MenuItem) => {
-					item.setTitle(strings().viewTypeMenu(view.type))
-						.setIcon(`${view.icon}`)
-						.onClick(async () => {
-							if (view.type === "modal") {
-								originLeaf?.detach();
-								setTimeout(() => {
-									this.initModal(this.state, true, false);
-								}, 10);
-							} else if (view.type === "sidebar") {
-								await initSearchViewWithLeaf(
-									this.app,
-									view.type,
-									this.state
-								);
-							} else {
-								if (current === "window") {
-									originLeaf?.detach();
-									setTimeout(async () => {
-										await initSearchViewWithLeaf(
-											this.app,
-											<"tab" | "split">view.type,
-											this.state
-										);
-									}, 10);
-								} else {
-									await initSearchViewWithLeaf(
-										this.app,
-										view.type,
-										this.state
-									);
-								}
-							}
-							if (current === "modal") {
-								this.modal.close();
-							} else {
-								originLeaf?.detach();
-							}
-						});
-				});
+		}
+		return menu;
+	}
+
+	/** Add the view switcher, extra options and the Tab preview to a search view. */
+	private decorateSearchView(view: SearchView & SearchViewInternals) {
+		// Every step is optional: the search view looks different across
+		// platforms (mobile, #68) and Obsidian versions.
+		if (this.unloading || this.searchViewCleanups.has(view)) return;
+		let cleanupPreview: (() => void) | undefined;
+		const cleanup = () => {
+			cleanupPreview?.();
+			cleanupPreview = undefined;
+			view.containerEl.querySelectorAll(".float-search-view-switch, .float-search-param")
+				.forEach((element) => element.remove());
+			this.searchViewCleanups.delete(view);
+		};
+		this.searchViewCleanups.set(view, cleanup);
+		view.register(cleanup);
+		const steps: [string, () => void][] = [
+			["view switcher", () => this.addViewSwitchButton(view)],
+			["search options", () => this.addSearchParamSettings(view)],
+			["preview", () => { cleanupPreview = attachNativeSearchPreview(this, view); }],
+		];
+		for (const [name, step] of steps) {
+			try {
+				step();
+			} catch (error) {
+				console.error(`Float Search: failed to add ${name} to the search view`, error);
 			}
-			return menu;
+		}
+	}
+
+	private addViewSwitchButton(view: SearchView & SearchViewInternals) {
+		const anchorEl = view.filterSectionToggleEl;
+		const rowEl =
+			anchorEl?.parentElement ??
+			view.containerEl.querySelector<HTMLElement>(".search-row");
+		if (!rowEl || rowEl.querySelector(".float-search-view-switch")) return;
+
+		const viewSwitchEl = rowEl.createDiv({ cls: "float-search-view-switch" });
+		new ExtraButtonComponent(viewSwitchEl)
+			.setIcon("layout-template")
+			.setTooltip(strings().switchToFileView)
+			.onClick(() => {
+				const menu = this.buildViewMenu(
+					new Menu(),
+					this.currentViewType(view.leaf),
+					view.leaf
+				);
+				const rect = viewSwitchEl.getBoundingClientRect();
+				menu.showAtPosition({ x: rect.x, y: rect.y + 30 });
+			});
+		if (anchorEl && anchorEl.parentElement === rowEl) {
+			rowEl.insertBefore(viewSwitchEl, anchorEl);
+		} else {
+			rowEl.appendChild(viewSwitchEl);
+		}
+	}
+
+	private addSearchParamSettings(view: SearchView & SearchViewInternals) {
+		const paramsEl = view.searchParamsContainerEl;
+		if (!paramsEl || paramsEl.querySelector(".float-search-param")) return;
+		const { settings } = this;
+
+		new Setting(paramsEl)
+			.setName(strings().showFilePath)
+			.setClass("float-search-param")
+			.addToggle((toggle) => {
+				toggle.toggleEl.addClass("mod-small");
+				toggle
+					.setValue(settings.showFilePath)
+					.onChange((value) => this.setFilePathVisibility(value));
+			});
+		new Setting(paramsEl)
+			.setName(strings().showInstructions)
+			.setClass("float-search-param")
+			.addToggle((toggle) => {
+				toggle.toggleEl.addClass("mod-small");
+				toggle.setValue(settings.showInstructions).onChange(async (value) => {
+					settings.showInstructions = value;
+					await this.saveSettings();
+				});
+			});
+		new Setting(paramsEl)
+			.setName(strings().defaultViewType)
+			.setClass("float-search-param")
+			.addDropdown((dropdown) => {
+				dropdown
+					.addOptions(strings().viewType)
+					.setValue(settings.defaultViewType)
+					.onChange(async (value) => {
+						settings.defaultViewType = value as searchType;
+						await this.saveSettings();
+					});
+			});
+	}
+
+	patchSearchView() {
+		const settings = this.settings;
+		const workspace = this.app.workspace;
+		const decorate = (view: SearchView) => this.decorateSearchView(view);
+		const saveOption = <K extends keyof searchState>(key: K, value: searchState[K]) => {
+			if (!workspace.layoutReady) return;
+			if (key === "sortOrder" && value === "alphabetical" &&
+				nativeSearchState(this.state).sortOrder !== this.state.sortOrder) return;
+			settings.searchViewState[key] = value;
+			if (key !== "query") this.state[key] = value;
+			this.applySettingsUpdate();
+		};
+		const interceptQuery = (leaf: WorkspaceLeaf | undefined, state: searchState): boolean => {
+			if (typeof state?.query !== "string" || state.triggerBySelf) return false;
+			if (!leaf || isEmebeddedLeaf(leaf)) return false;
+			if (this.settings.defaultViewType === "sidebar" && isSidebarLeaf(leaf)) return false;
+			if (!this.queryLoaded) {
+				this.queryLoaded = true;
+				return false;
+			}
+			const search = { ...this.state, ...state, current: false };
+			const type = this.settings.defaultViewType;
+			if (type === "modal") this.initModal(search, true, false);
+			else void initSearchViewWithLeaf(this.app, type, search);
+			return true;
 		};
 
+		let patchPending = false;
 		const patchSearch = async () => {
-			const searchLeaf = this.app.workspace.getLeavesOfType("search")[0];
-			if (!searchLeaf) return false;
-			if (requireApiVersion("1.7.3") && searchLeaf.isDeferred) {
-				await searchLeaf.loadIfDeferred();
+			if (patchPending || this.unloading) return false;
+			const leaves = workspace.getLeavesOfType("search");
+			const leaf = leaves.find((l) => !isEmebeddedLeaf(l)) ?? leaves[0];
+			if (!leaf) return false;
+			if (requireApiVersion("1.7.3") && leaf.isDeferred) {
+				patchPending = true;
+				try {
+					await leaf.loadIfDeferred();
+				} finally {
+					patchPending = false;
+				}
+				if (this.unloading) return false;
 			}
-
-			const searchView = searchLeaf?.view as any;
-			// Keep the plugin receiver across native method wrappers.
-		// eslint-disable-next-line @typescript-eslint/no-this-alias
-		const self = this;
-
-			if (!searchView) return false;
-
-			const searchViewConstructor = searchView.constructor;
+			const searchView = leaf.view as SearchView;
+			if (searchView?.getViewType() !== "search" || !searchView.dom) return false;
 
 			this.register(
-				around(searchViewConstructor.prototype, {
+				around(searchView.constructor.prototype as SearchViewPatchTarget, {
 					onOpen(old) {
-						return function () {
-							old.call(this);
-
-							const viewSwitchEl = createDiv({
-								cls: "float-search-view-switch",
-							});
-							const targetEl = this.filterSectionToggleEl;
-							const viewSwitchButton = new ExtraButtonComponent(
-								viewSwitchEl
-							);
-							viewSwitchButton
-								.setIcon("layout-template")
-								.setTooltip(strings().switchToFileView);
-							viewSwitchButton.onClick(() => {
-								const currentType = checkCurrentViewType(
-									this.leaf
-								);
-								const layoutMenu = initViewMenu(
-									new Menu(),
-									currentType,
-									this.leaf
-								);
-								const viewSwitchButtonPos =
-									viewSwitchEl.getBoundingClientRect();
-								layoutMenu.showAtPosition({
-									x: viewSwitchButtonPos.x,
-									y: viewSwitchButtonPos.y + 30,
-								});
-							});
-							targetEl.parentElement.insertBefore(
-								viewSwitchEl,
-								targetEl
-							);
-							if (!this.hidePathToggle) {
-								this.hidePathToggle = new Setting(
-									this.searchParamsContainerEl
-								)
-									.setName(strings().showFilePath)
-									.addToggle((toggle) => {
-										toggle.toggleEl.toggleClass(
-											"mod-small",
-											true
-										);
-										toggle
-											.setValue(
-												self.settings.showFilePath
-											)
-											.onChange(async (value) => {
-												self.settings.showFilePath =
-													!value;
-												self.changeFilePathVisibility();
-												self.applySettingsUpdate();
-											});
-									});
-							}
-							if (!this.showInstructionsToggle) {
-								this.showInstructionsToggle = new Setting(
-									this.searchParamsContainerEl
-								)
-									.setName(strings().showInstructions)
-									.addToggle((toggle) => {
-										toggle.toggleEl.toggleClass(
-											"mod-small",
-											true
-										);
-										toggle
-											.setValue(
-												self.settings.showInstructions
-											)
-											.onChange(async (value) => {
-												self.settings.showInstructions =
-													value;
-												self.applySettingsUpdate();
-											});
-									});
-							}
-							if (!this.defaultViewTypeDropdown) {
-								this.defaultViewTypeDropdown = new Setting(
-									this.searchParamsContainerEl
-								)
-									.setName(strings().defaultViewType)
-									.addDropdown((dropdown) => {
-										const viewLabels = strings().viewType;
-										dropdown.addOptions({
-											modal: viewLabels.modal,
-											split: viewLabels.split,
-											tab: viewLabels.tab,
-											window: viewLabels.window,
-											sidebar: viewLabels.sidebar,
-										});
-										dropdown.setValue(
-											self.settings.defaultViewType
-										);
-										dropdown.onChange((value) => {
-											self.settings.defaultViewType =
-												value as searchType;
-											self.applySettingsUpdate();
-										});
-									});
-							}
+						return async function (this: SearchView) {
+							await old.call(this);
+							if (this.leaf.view === this || this.containerEl.isConnected) decorate(this);
 						};
 					},
 					setExplainSearch(old) {
-						return function (value: boolean) {
+						return function (this: SearchView, value: boolean) {
 							old.call(this, value);
-							if (self.app.workspace.layoutReady) {
-								self.settings.searchViewState.explainSearch =
-									value;
-								self.applySettingsUpdate();
-							}
+							saveOption("explainSearch", value);
 						};
 					},
 					setCollapseAll(old) {
-						return function (value: boolean) {
+						return function (this: SearchView, value: boolean) {
 							old.call(this, value);
-							if (self.app.workspace.layoutReady) {
-								self.settings.searchViewState.collapseAll =
-									value;
-								self.applySettingsUpdate();
-							}
+							saveOption("collapseAll", value);
 						};
 					},
 					setExtraContext(old) {
-						return function (value: boolean) {
+						return function (this: SearchView, value: boolean) {
 							old.call(this, value);
-							if (self.app.workspace.layoutReady) {
-								self.settings.searchViewState.extraContext =
-									value;
-								self.applySettingsUpdate();
-							}
+							saveOption("extraContext", value);
 						};
 					},
 					setMatchingCase(old) {
-						return function (value: boolean) {
+						return function (this: SearchView, value: boolean) {
 							old.call(this, value);
-							if (self.app.workspace.layoutReady) {
-								self.settings.searchViewState.matchingCase =
-									value;
-								self.applySettingsUpdate();
-							}
+							saveOption("matchingCase", value);
 						};
 					},
 					setSortOrder(old) {
-						return function (value: string) {
+						return function (this: SearchView, value: string) {
 							old.call(this, value);
-							if (self.app.workspace.layoutReady) {
-								self.settings.searchViewState.sortOrder =
-									value as sortOrder;
-								self.applySettingsUpdate();
-							}
+							saveOption("sortOrder", value as sortOrder);
 						};
 					},
 					setQuery(old) {
-						return function (value: string) {
+						return function (this: SearchView, value: string) {
 							old.call(this, value);
-							if (self.app.workspace.layoutReady) {
-								self.settings.searchViewState.query = value;
-								self.applySettingsUpdate();
-							}
+							saveOption("query", value);
 						};
 					},
 					setState(old) {
-						return function (
-							state: any,
-							eState: Record<string, unknown>
-						) {
-							if (
-								typeof state.query === "string" &&
-								!state?.triggerBySelf
-							) {
-								if (self.queryLoaded) {
-									if (
-										self.settings.defaultViewType ===
-										"modal"
-									) {
-										self.initModal(
-											{
-												...state,
-												query: state.query,
-												current: false,
-												triggerBySelf: true,
-											},
-											true,
-											false
-										);
-									} else {
-										initSearchViewWithLeaf(
-											self.app,
-											self.settings.defaultViewType,
-											{
-												...state,
-												query: state.query,
-												current: false,
-												triggerBySelf: true,
-											}
-										);
-									}
-
-									return;
-								}
-
-								self.queryLoaded = true;
-							}
-
-							old.call(this, state, eState);
+						return function (this: SearchView, state: searchState, result: ViewStateResult) {
+							if (interceptQuery(this.leaf, state)) return Promise.resolve();
+							return old.call(this, state, result);
 						};
 					},
 				})
 			);
-			searchView.leaf?.rebuildView();
+			this.patchSearchResultDom(searchView);
+
+			// Existing native views already completed onOpen; decoration does not reset their query.
+			for (const l of getWorkspaceSearchLeaves(this.app)) {
+				if (l.view.getViewType() === "search") decorate(l.view as SearchView);
+			}
+			this.queryLoaded = workspace.layoutReady;
 			return true;
 		};
-		this.app.workspace.onLayoutReady(async () => {
-			if (!(await patchSearch())) {
-				const evt = this.app.workspace.on("layout-change", async () => {
-					(await patchSearch()) && this.app.workspace.offref(evt);
-				});
-				this.registerEvent(evt);
-			}
+
+		const tryPatch = async () => {
+			if ((await patchSearch()) || this.unloading) return;
+			const ref = workspace.on("layout-change", () => {
+				void patchSearch().then((patched) => {
+					if (patched) workspace.offref(ref);
+				}).catch((error) => console.error("Float Search Window: failed to patch Search", error));
+			});
+			this.registerEvent(ref);
+		};
+		void tryPatch().catch((error) => {
+			console.error("Float Search: failed to patch the search view", error);
 		});
 	}
 
-	patchVchildren() {
-		const patchSearchDom = () => {
-			const searchView = this.app.workspace.getLeavesOfType("search")[0]
-				?.view as any;
-			if (!searchView) return false;
-
-			const dom = searchView.dom.constructor;
-
-			this.register(
-				around(dom.prototype, {
-					stopLoader(old) {
-						return function () {
-							old.call(this);
-							// console.log(this?.vChildren?.children);
-							this?.vChildren?.children?.forEach((child: any) => {
-								if (child?.file && !child?.pathEl) {
-									const path =
-										child?.file.parent?.path || "/";
-									const pathEl = createDiv({
-										cls: "search-result-file-path",
-									});
-									const pathIconEl = pathEl.createDiv({
-										cls: "search-result-file-path-icon",
-									});
-									setIcon(pathIconEl, "folder");
-									pathEl.createDiv({
-										cls: "search-result-file-path-text",
-										text: path,
-									});
-									child.pathEl = pathEl;
-									const titleEl = child.containerEl.find(
-										".search-result-file-title"
-									);
-									titleEl.prepend(pathEl);
-								}
+	/** Show the folder of each file result (the "Show file path" option). */
+	private patchSearchResultDom(searchView: SearchView) {
+		this.register(
+			around(searchView.dom.constructor.prototype as { stopLoader(): void }, {
+				stopLoader(old) {
+					return function (this: { vChildren?: { children?: ResultFileItem[] } }) {
+						old.call(this);
+						(this.vChildren?.children ?? []).forEach((child) => {
+							if (!child?.file || child.pathEl) return;
+							const titleEl = (child.containerEl ?? child.el)?.querySelector(".search-result-file-title");
+							if (!titleEl) return;
+							const pathEl = titleEl.createDiv({ cls: "search-result-file-path", prepend: true });
+							setIcon(pathEl.createDiv({ cls: "search-result-file-path-icon" }), "folder");
+							pathEl.createDiv({
+								cls: "search-result-file-path-text",
+								text: child.file.parent?.path || "/",
 							});
-						};
-					},
-				})
-			);
-			return true;
-		};
-		this.app.workspace.onLayoutReady(() => {
-			if (!patchSearchDom()) {
-				const evt = this.app.workspace.on("layout-change", () => {
-					patchSearchDom() && this.app.workspace.offref(evt);
-				});
-				this.registerEvent(evt);
-			}
-		});
+							child.pathEl = pathEl;
+						});
+					};
+				},
+			})
+		);
 	}
 
 	patchDragManager() {
 		const manager = this.app.dragManager;
 		if (!manager) return;
-		// Keep the plugin receiver across native method wrappers.
-		// eslint-disable-next-line @typescript-eslint/no-this-alias
-		const self = this;
-
-		this.register(
-			around(manager.constructor.prototype, {
-				dragFile(old: any) {
-					return function (e: any, a: TFile) {
-						const result = old.call(this, e, a);
-
-						setTimeout(() => {
-							self?.modal?.close();
-						}, 10);
-						return result;
-					};
-				},
-			})
-		);
+		const closeSearch = () => this.modal?.close();
+		this.register(around(manager.constructor.prototype as { dragFile(...args: unknown[]): unknown }, {
+			dragFile(old) {
+				return function (this: unknown, ...args) {
+					const result = old.call(this, ...args);
+					window.setTimeout(closeSearch, 10);
+					return result;
+				};
+			},
+		}));
 	}
 
 	registerObsidianURIHandler() {
@@ -995,7 +813,7 @@ export default class FloatSearchPlugin extends Plugin {
 		this.registerObsidianProtocolHandler(
 			"fs",
 			async (path: ObsidianProtocolData) => {
-				const viewType = path.viewType || "modal";
+				const viewType = allViews.find(({ type }) => type === path.viewType)?.type ?? "modal";
 				const query = path.query || "";
 
 				if (viewType === "modal") {
@@ -1011,7 +829,7 @@ export default class FloatSearchPlugin extends Plugin {
 				} else {
 					await initSearchViewWithLeaf(
 						this.app,
-						viewType as PaneType | "sidebar",
+						viewType,
 						{
 							...this.state,
 							query,
@@ -1027,9 +845,9 @@ export default class FloatSearchPlugin extends Plugin {
 		id: string;
 		name: string;
 		queryBuilder: (file?: TFile) => string;
-		global: boolean;
+		isGlobal: boolean;
 	}): void {
-		if (options.global) {
+		if (options.isGlobal) {
 			this.addCommand({
 				id: options.id,
 				name: options.name,
@@ -1044,9 +862,9 @@ export default class FloatSearchPlugin extends Plugin {
 							false
 						);
 					} else {
-						initSearchViewWithLeaf(
+						void initSearchViewWithLeaf(
 							this.app,
-							viewType as PaneType | "sidebar",
+							viewType,
 							{
 								...this.state,
 								query,
@@ -1061,7 +879,7 @@ export default class FloatSearchPlugin extends Plugin {
 				id: options.id,
 				name: options.name,
 				checkCallback: (checking: boolean) => {
-					const activeLeaf = this.app.workspace.activeLeaf;
+					const activeLeaf = getActiveLeaf(this.app.workspace);
 					if (!activeLeaf) return;
 
 					const viewType = activeLeaf.view.getViewType();
@@ -1078,9 +896,9 @@ export default class FloatSearchPlugin extends Plugin {
 									false
 								);
 							} else {
-								initSearchViewWithLeaf(
+								void initSearchViewWithLeaf(
 									this.app,
-									viewType as PaneType | "sidebar",
+									viewType,
 									{
 										...this.state,
 										query,
@@ -1101,7 +919,7 @@ export default class FloatSearchPlugin extends Plugin {
 			id: "show-or-hide-file-path",
 			name: strings().cmdShowHideFilePath,
 			callback: () => {
-				this.changeFilePathVisibility();
+				this.setFilePathVisibility(!this.settings.showFilePath);
 			},
 		});
 
@@ -1138,7 +956,7 @@ export default class FloatSearchPlugin extends Plugin {
 					"(\\|[^\\]]*)?\\]\\]/"
 				);
 			},
-			global: false,
+			isGlobal: false,
 		});
 
 		this.createCommand({
@@ -1148,7 +966,7 @@ export default class FloatSearchPlugin extends Plugin {
 				if (!file) return "";
 				return " path:" + `"${file.path}"`;
 			},
-			global: false,
+			isGlobal: false,
 		});
 
 		// Register search operator commands
@@ -1160,18 +978,12 @@ export default class FloatSearchPlugin extends Plugin {
 				name: strings().cmdOpenSearchView(type),
 				callback: async () => {
 					const existingLeaf =
-						this.app.workspace.getLeavesOfType("search");
+						getWorkspaceSearchLeaves(this.app);
 					switch (type) {
 						case "window": {
-							// @ts-ignore
-							const isExistingWindowLeaf = existingLeaf.find(
-								(leaf) =>
-									leaf.parentSplit.parent.type === "window"
-							);
+							const isExistingWindowLeaf = existingLeaf.find(isPopoutLeaf);
 							if (isExistingWindowLeaf) {
-								this.app.workspace.revealLeaf(
-									isExistingWindowLeaf
-								);
+								await revealSearchLeaf(this.app, isExistingWindowLeaf);
 								return;
 							}
 							await initSearchViewWithLeaf(this.app, type, {
@@ -1182,20 +994,16 @@ export default class FloatSearchPlugin extends Plugin {
 						}
 						case "tab":
 						case "split": {
-							// @ts-ignore
 							const isExistingLeaf = existingLeaf.find(
-								(leaf) => !leaf.parentSplit.parent.side
+								(leaf) => !isSidebarLeaf(leaf) && !isPopoutLeaf(leaf)
 							);
 							if (isExistingLeaf) {
-								this.app.workspace.revealLeaf(isExistingLeaf);
-								isExistingLeaf.setViewState({
+								await isExistingLeaf.setViewState({
 									type: "search",
 									active: true,
-									state: {
-										...this.state,
-										triggerBySelf: true,
-									} as Record<string, unknown>,
+									state: nativeSearchState({ ...this.state, triggerBySelf: true }),
 								});
+								await revealSearchLeaf(this.app, isExistingLeaf);
 								return;
 							}
 							await initSearchViewWithLeaf(this.app, type, {
@@ -1286,7 +1094,7 @@ export default class FloatSearchPlugin extends Plugin {
 				id: operator.id,
 				name: operator.name,
 				queryBuilder: () => operator.query || "",
-				global: true,
+				isGlobal: true,
 			});
 		});
 	}
@@ -1357,7 +1165,7 @@ export default class FloatSearchPlugin extends Plugin {
 								.setTitle(strings().menuOpenInFloatPreview)
 								.onClick(async () => {
 									if (this.modal) {
-										await this.modal.initFileView(
+										await this.modal?.initFileView(
 											file,
 											undefined
 										);
@@ -1370,8 +1178,8 @@ export default class FloatSearchPlugin extends Plugin {
 										true,
 										true
 									);
-									setTimeout(async () => {
-										await this.modal.initFileView(
+									window.setTimeout(async () => {
+										await this.modal?.initFileView(
 											file,
 											undefined
 										);
@@ -1414,1420 +1222,15 @@ export default class FloatSearchPlugin extends Plugin {
 	}
 
 	async loadSettings() {
-		this.settings = Object.assign(
-			{},
-			DEFAULT_SETTINGS,
-			await this.loadData()
-		);
+		const saved = await this.loadData() as Partial<FloatSearchSettings> | null;
+		this.settings = {
+			...DEFAULT_SETTINGS,
+			...saved,
+			searchViewState: { ...DEFAULT_SETTINGS.searchViewState, ...saved?.searchViewState },
+		};
 	}
 
 	async saveSettings() {
 		await this.saveData(this.settings);
 	}
 }
-
-const triggerKeyOptions = (): Record<CmdkTriggerKey, string> => {
-	const s = strings();
-	return {
-		Shift: s.triggerShift,
-		Control: s.triggerControl,
-		Alt: s.triggerAlt,
-		Meta: s.triggerMeta,
-		none: s.triggerNone,
-	};
-};
-
-type SettingsTabId = "general" | "quick-search" | "quick-create";
-
-class FloatSearchSettingTab extends PluginSettingTab {
-	plugin: FloatSearchPlugin;
-	private activeTab: SettingsTabId = "general";
-
-	constructor(app: App, plugin: FloatSearchPlugin) {
-		super(app, plugin);
-		this.plugin = plugin;
-	}
-
-	display() {
-		const { containerEl } = this;
-		const s = strings();
-		containerEl.empty();
-		containerEl.addClass("float-search-settings-tab");
-
-		containerEl.createEl("h3", { text: s.settingsTitle });
-		containerEl.createEl("p", {
-			cls: "float-search-settings-intro",
-			text: s.pluginIntro,
-		});
-
-		const tabsContainer = containerEl.createDiv({
-			cls: "float-search-settings-tabs-container",
-		});
-		const tabsList: { id: SettingsTabId; name: string }[] = [
-			{ id: "general", name: s.tabGeneral },
-			{ id: "quick-search", name: s.tabQuickSearch },
-			{ id: "quick-create", name: s.tabQuickCreate },
-		];
-		for (const tab of tabsList) {
-			const btn = tabsContainer.createEl("button", { text: tab.name });
-			if (this.activeTab === tab.id) btn.addClass("is-active");
-			btn.onclick = () => {
-				this.activeTab = tab.id;
-				this.display();
-			};
-		}
-
-		const content = containerEl.createDiv({
-			cls: "float-search-settings-content",
-		});
-		if (this.activeTab === "general") this.renderGeneral(content, s);
-		else if (this.activeTab === "quick-search")
-			this.renderQuickSearch(content, s);
-		else this.renderQuickCreate(content, s);
-	}
-
-	private renderGeneral(container: HTMLElement, s: ReturnType<typeof strings>) {
-		new Setting(container)
-			.setName(s.defaultViewType)
-			.addDropdown((dropdown) => {
-				const viewLabels = s.viewType;
-				dropdown.addOptions({
-					modal: viewLabels.modal,
-					split: viewLabels.split,
-					tab: viewLabels.tab,
-					window: viewLabels.window,
-					sidebar: viewLabels.sidebar,
-				});
-				dropdown.setValue(this.plugin.settings.defaultViewType);
-				dropdown.onChange((value) => {
-					this.plugin.settings.defaultViewType = value as searchType;
-					this.plugin.applySettingsUpdate();
-				});
-			});
-
-		new Setting(container)
-			.setName(s.showFilePath)
-			.addToggle((toggle) => {
-				toggle
-					.setValue(this.plugin.settings.showFilePath)
-					.onChange(async (value) => {
-						this.plugin.settings.showFilePath = value;
-						this.plugin.updateFilePathVisibility();
-						this.plugin.applySettingsUpdate();
-					});
-			});
-
-		new Setting(container)
-			.setName(s.showInstructions)
-			.addToggle((toggle) => {
-				toggle
-					.setValue(this.plugin.settings.showInstructions)
-					.onChange(async (value) => {
-						this.plugin.settings.showInstructions = value;
-						this.plugin.applySettingsUpdate();
-					});
-			});
-	}
-
-	private renderQuickSearch(
-		container: HTMLElement,
-		s: ReturnType<typeof strings>
-	) {
-		new Setting(container)
-			.setName(s.quickSearchTrigger)
-			.setDesc(s.quickSearchTriggerDesc)
-			.addDropdown((dropdown) => {
-				for (const [value, label] of Object.entries(
-					triggerKeyOptions()
-				)) {
-					dropdown.addOption(value, label);
-				}
-				dropdown.setValue(this.plugin.settings.cmdkTriggerKey);
-				dropdown.onChange(async (value) => {
-					this.plugin.settings.cmdkTriggerKey =
-						value as CmdkTriggerKey;
-					await this.plugin.saveSettings();
-				});
-			});
-
-		new Setting(container)
-			.setName(s.doubleTapInterval)
-			.setDesc(s.doubleTapIntervalDesc)
-			.addSlider((slider) => {
-				slider
-					.setLimits(150, 600, 50)
-					.setValue(this.plugin.settings.cmdkDoubleTapInterval)
-					.setDynamicTooltip()
-					.onChange(async (value) => {
-						this.plugin.settings.cmdkDoubleTapInterval = value;
-						await this.plugin.saveSettings();
-					});
-			});
-	}
-
-	private renderQuickCreate(
-		container: HTMLElement,
-		s: ReturnType<typeof strings>
-	) {
-		new Setting(container)
-			.setName(s.enableQuickCreate)
-			.setDesc(s.enableQuickCreateDesc)
-			.addToggle((toggle) => {
-				toggle
-					.setValue(this.plugin.settings.cmdkQuickCreate)
-					.onChange(async (value) => {
-						this.plugin.settings.cmdkQuickCreate = value;
-						await this.plugin.saveSettings();
-					});
-			});
-
-		new Setting(container)
-			.setName(s.quickCreateFolder)
-			.setDesc(s.quickCreateFolderDesc)
-			.addText((text) => {
-				text.setPlaceholder(s.quickCreateFolderPlaceholder)
-					.setValue(this.plugin.settings.cmdkQuickCreateFolder)
-					.onChange(async (value) => {
-						this.plugin.settings.cmdkQuickCreateFolder = value;
-						await this.plugin.saveSettings();
-					});
-			});
-
-		new Setting(container)
-			.setName(s.titleFormat)
-			.setDesc(s.titleFormatDesc)
-			.addText((text) => {
-				text.setPlaceholder("YYYYMMDDHHmmss")
-					.setValue(this.plugin.settings.cmdkQuickCreateTitleFormat)
-					.onChange(async (value) => {
-						this.plugin.settings.cmdkQuickCreateTitleFormat =
-							value;
-						await this.plugin.saveSettings();
-					});
-			});
-	}
-}
-
-function createInstructionElement(
-	parentEl: HTMLElement,
-	divCls: string,
-	keyText: string,
-	text: string
-) {
-	const divEl = parentEl.createDiv({ cls: divCls });
-	const iconEl = divEl.createSpan({
-		cls: "float-search-modal-instructions-key",
-	});
-	const textEl = divEl.createSpan({
-		cls: "float-search-modal-instructions-text",
-	});
-
-	iconEl.setText(keyText);
-	textEl.setText(text);
-
-	return { divEl, iconEl, textEl };
-}
-
-class FloatSearchModal extends Modal {
-	private readonly plugin: FloatSearchPlugin;
-	private searchEmbeddedView: EmbeddedView;
-	private fileEmbeddedView: EmbeddedView | undefined;
-
-	searchLeaf: WorkspaceLeaf;
-	fileLeaf: WorkspaceLeaf | undefined;
-
-	private cb: (state: any) => void;
-	private state: any;
-
-	private fileState: any;
-
-	private searchCtnEl: HTMLElement;
-	private unwatchFilters: (() => void) | null = null;
-	private unbindNativeQuery: (() => void) | null = null;
-	private instructionsEl: HTMLElement;
-	private fileEl: HTMLElement;
-	private viewType: string;
-
-	private focusdItem: any;
-	private closed = false;
-	private previewRequest = 0;
-	private previewQueue: Promise<void> = Promise.resolve();
-	private inputCleanup: (() => void) | null = null;
-
-	private debouncedAutoPreview = debounce(() => {
-		this.autoPreviewFocusedItem();
-	}, 150);
-
-	constructor(
-		cb: (state: any) => void,
-		plugin: FloatSearchPlugin,
-		state: any,
-		viewType = "search"
-	) {
-		super(plugin.app);
-		this.plugin = plugin;
-		this.cb = cb;
-		this.state = state;
-		this.viewType = viewType;
-	}
-
-	async onOpen() {
-		this.closed = false;
-		const { contentEl, containerEl, modalEl } = this;
-
-		this.searchCtnEl = contentEl.createDiv({
-			cls: "float-search-modal-search-ctn",
-		});
-		this.instructionsEl = modalEl.createDiv({
-			cls: "float-search-modal-instructions",
-		});
-
-		this.initInstructions(this.instructionsEl);
-		this.initCss(contentEl, modalEl, containerEl);
-		await this.initSearchView(this.searchCtnEl);
-		if (this.closed) {
-			this.searchLeaf?.detach();
-			return;
-		}
-		this.initFilterBar();
-		this.initInput();
-		this.initContent();
-	}
-
-	onClose() {
-		this.closed = true;
-		this.debouncedAutoPreview.cancel();
-		this.inputCleanup?.();
-		this.inputCleanup = null;
-		this.clearPreview();
-		const { contentEl } = this;
-		this.unwatchFilters?.();
-		this.unwatchFilters = null;
-		this.unbindNativeQuery?.();
-		this.unbindNativeQuery = null;
-		setPreviewFile(null);
-
-		if (this.searchLeaf) this.cb(this.searchLeaf.view.getState());
-
-		this.searchLeaf?.detach();
-		this.fileLeaf?.detach();
-		this.searchEmbeddedView?.unload();
-		this.fileEmbeddedView?.unload();
-		contentEl.empty();
-	}
-
-	initInstructions(instructionsEl: HTMLElement) {
-		if (!this.plugin.settings.showInstructions) {
-			return;
-		}
-		const s = strings();
-		createInstructionElement(
-			instructionsEl,
-			"float-search-modal-instructions-navigate",
-			"↑↓",
-			s.instrNavigate
-		);
-		createInstructionElement(
-			instructionsEl,
-			"float-search-modal-instructions-collapse",
-			"Shift+↑↓",
-			s.instrCollapse
-		);
-		createInstructionElement(
-			instructionsEl,
-			"float-search-modal-instructions-enter",
-			"↵",
-			s.instrOpenBackground
-		);
-		createInstructionElement(
-			instructionsEl,
-			"float-search-modal-instructions-alt-enter",
-			"Alt+↵",
-			s.instrOpenAndClose
-		);
-		createInstructionElement(
-			instructionsEl,
-			"float-search-modal-instructions-ctrl-enter",
-			"Ctrl+↵",
-			s.instrCreateIfMissing
-		);
-		createInstructionElement(
-			instructionsEl,
-			"float-search-modal-instructions-tab",
-			"Tab/Shift+Tab",
-			s.instrPreview
-		);
-		createInstructionElement(
-			instructionsEl,
-			"float-search-modal-instructions-switch",
-			"Ctrl+G",
-			s.instrSwitchView
-		);
-		createInstructionElement(
-			instructionsEl,
-			"float-search-modal-instructions-click",
-			"Alt+Click",
-			s.instrAltClick
-		);
-	}
-
-	initCss(
-		contentEl: HTMLElement,
-		modalEl: HTMLElement,
-		containerEl: HTMLElement
-	) {
-		contentEl.classList.add("float-search-modal-content");
-		modalEl.classList.add("float-search-modal");
-		containerEl.classList.add("float-search-modal-container");
-	}
-
-	async initSearchView(contentEl: HTMLElement) {
-		const [createdLeaf, embeddedView] = spawnLeafView(
-			this.plugin,
-			contentEl
-		);
-		this.searchLeaf = createdLeaf;
-		this.searchEmbeddedView = embeddedView;
-
-		this.searchLeaf.setPinned(true);
-		await this.searchLeaf.setViewState({
-			type: "search",
-			state: { ...this.state, matchingCase: this.plugin.settings.filterMatchCase, triggerBySelf: true },
-		});
-
-		setTimeout(async () => {
-			if (this.closed) return;
-			await this.searchLeaf.view.setState(
-				{ ...this.state, matchingCase: this.plugin.settings.filterMatchCase, triggerBySelf: true },
-				{ history: false }
-			);
-			if (this.closed) return;
-			const searchComponent = (this.searchLeaf.view as SearchView)
-				.searchComponent;
-			if (searchComponent?.inputEl) {
-				this.state?.current
-					? searchComponent.inputEl.setSelectionRange(0, 0)
-					: searchComponent.inputEl.setSelectionRange(
-							0,
-							this.state?.query?.length
-					);
-			}
-		}, 0);
-
-		return;
-	}
-
-	private initFilterBar() {
-		const searchRow = this.searchCtnEl.querySelector(".search-row");
-		if (searchRow) {
-			mountFilterBar(searchRow as HTMLElement, this.plugin, () =>
-				this.onFilterChange()
-			);
-		}
-		const view = this.searchLeaf.view as SearchView;
-		this.unbindNativeQuery = bindNativeRegexSearch(view, this.plugin, () => {
-			this.debouncedAutoPreview.cancel();
-			this.clearPreview();
-		});
-		this.syncNativeMatchCase(view);
-		(view as SearchView & { startSearch?: () => void }).startSearch?.();
-		this.unwatchFilters = watchNativeSearchResults(view, this.plugin);
-	}
-
-	private onFilterChange() {
-		this.clearPreview();
-		const view = this.searchLeaf.view as SearchView;
-		this.syncNativeMatchCase(view);
-		(view as SearchView & { startSearch?: () => void }).startSearch?.();
-		applyNativeResultFilters(view, this.plugin);
-	}
-
-	private syncNativeMatchCase(view: SearchView) {
-		const state = view.getState();
-		if (state.matchingCase === this.plugin.settings.filterMatchCase) return;
-		const target = view as SearchView & { setMatchingCase?: (value: boolean) => void };
-		if (typeof target.setMatchingCase === "function") {
-			target.setMatchingCase(this.plugin.settings.filterMatchCase);
-			return;
-		}
-		if (state.matchingCase !== this.plugin.settings.filterMatchCase) {
-			view.setState({
-				...state,
-				matchingCase: this.plugin.settings.filterMatchCase,
-				triggerBySelf: true,
-			}, { history: false });
-		}
-	}
-
-	initInput(retries = 10) {
-		if (this.closed) return;
-		const inputEl = this.contentEl.getElementsByTagName("input")[0];
-		if (!inputEl) {
-			if (retries > 0) {
-				setTimeout(() => this.initInput(retries - 1), 50);
-			}
-			return;
-		}
-		const clear = () => {
-			this.debouncedAutoPreview.cancel();
-			this.clearPreview();
-		};
-		inputEl.addEventListener("input", clear);
-		this.inputCleanup = () => {
-			inputEl.removeEventListener("input", clear);
-			inputEl.onkeydown = null;
-		};
-		inputEl.focus();
-		inputEl.onkeydown = async (e) => {
-			if (e.isComposing || e.key === "Process" || e.keyCode === 229) {
-				return;
-			}
-			const currentView = this.searchLeaf.view as SearchView;
-			switch (e.key) {
-				case "ArrowDown":
-				case "n":
-					if (e.key === "n" && !e.ctrlKey) break;
-					if (e.key === "n") e.preventDefault();
-
-					if (e.shiftKey) {
-						currentView.onKeyShowMoreAfter(e);
-						if (currentView.dom.focusedItem) {
-							if (currentView.dom.focusedItem.collapsible) {
-								currentView.dom.focusedItem.setCollapse(false);
-							}
-							this.focusdItem = currentView.dom.focusedItem;
-						}
-					} else {
-						currentView.onKeyArrowDownInFocus(e);
-						this.focusdItem = currentView.dom.focusedItem;
-						this.debouncedAutoPreview();
-					}
-					break;
-				case "ArrowUp":
-				case "p":
-					if (e.key === "p" && !e.ctrlKey) break;
-					if (e.key === "p") e.preventDefault();
-
-					if (e.shiftKey) {
-						currentView.onKeyShowMoreBefore(e);
-						if (currentView.dom.focusedItem) {
-							if (currentView.dom.focusedItem.collapseEl) {
-								currentView.dom.focusedItem.setCollapse(true);
-							}
-							this.focusdItem = currentView.dom.focusedItem;
-						}
-					} else {
-						currentView.onKeyArrowUpInFocus(e);
-						this.focusdItem = currentView.dom.focusedItem;
-						if (!currentView.dom.focusedItem?.content) {
-							this.focusdItem = undefined;
-						}
-						this.debouncedAutoPreview();
-					}
-					break;
-				case "ArrowLeft":
-					currentView.onKeyArrowLeftInFocus(e);
-					break;
-				case "ArrowRight":
-					currentView.onKeyArrowRightInFocus(e);
-					break;
-				case "Enter":
-					if (
-						Keymap.isModifier(e, "Mod") &&
-						Keymap.isModifier(e, "Shift") &&
-						!this.focusdItem
-					) {
-						e.preventDefault();
-						const fileName = inputEl.value.trim();
-						const real = fileName.replace(/[/\\?%*:|"<>]/g, "-");
-						this.plugin.app.workspace.openLinkText(real, "", true);
-						this.close();
-						break;
-					}
-					{
-						const item = currentView.dom.focusedItem;
-						const focusedFile =
-							item?.parent?.file instanceof TFile
-								? item.parent.file
-								: item?.file;
-						if (
-							focusedFile instanceof TFile &&
-							!usesMarkdownView(this.plugin.app, focusedFile)
-						) {
-							e.preventDefault();
-							await openVaultFile(this.plugin.app, focusedFile, {
-								newTab: Keymap.isModEvent(e),
-							});
-							if (e.altKey) this.close();
-							break;
-						}
-					}
-					currentView.onKeyEnterInFocus(e);
-					if (e.altKey && currentView.dom.focusedItem) {
-						this.close();
-					}
-					break;
-				case "Tab":
-					e.preventDefault();
-					if (e.shiftKey) {
-						if (this.fileLeaf) {
-							this.fileLeaf?.detach();
-							this.fileLeaf = undefined;
-							this.fileEmbeddedView?.unload();
-							this.modalEl.toggleClass(
-								"float-search-width",
-								false
-							);
-							this.fileEl.detach();
-
-							break;
-						}
-					}
-
-					if (currentView.dom.focusedItem) {
-						const item = currentView.dom.focusedItem;
-						const file =
-							item.parent.file instanceof TFile
-								? item.parent.file
-								: item.file;
-
-						item.parent.file instanceof TFile
-							? this.initFileView(file, {
-									match: {
-										content: item.content,
-										matches: item.matches,
-									},
-							})
-							: this.initFileView(file, undefined);
-					}
-					break;
-				case "e":
-					if (e.ctrlKey) {
-						e.preventDefault();
-						if (this.fileLeaf) {
-							const estate = this.fileLeaf.getViewState();
-							estate.state = {
-								...estate.state,
-								mode:
-									"preview" === estate.state?.mode
-										? "source"
-										: "preview",
-							};
-							this.fileLeaf.setViewState(estate, {
-								focus: true,
-							});
-							setTimeout(() => {
-								(
-									this.searchLeaf.view as SearchView
-								).searchComponent?.inputEl?.focus();
-							}, 0);
-						}
-					}
-					break;
-				case "g":
-					if (this.fileLeaf && e.ctrlKey) {
-						e.preventDefault();
-						this.plugin.app.workspace.setActiveLeaf(this.fileLeaf, {
-							focus: true,
-						});
-					}
-					break;
-				case "C":
-					if (e.ctrlKey && e.shiftKey) {
-						e.preventDefault();
-						const text = currentView.dom.focusedItem.el.innerText;
-						navigator.clipboard.writeText(text);
-					}
-					break;
-			}
-		};
-	}
-
-	private autoPreviewFocusedItem() {
-		if (this.closed) return;
-		const currentView = this.searchLeaf.view as SearchView;
-		const item = currentView.dom?.focusedItem;
-		if (!item) {
-			this.clearPreview();
-			return;
-		}
-
-		const file =
-			item.parent?.file instanceof TFile
-				? item.parent.file
-				: item.file;
-		if (!(file instanceof TFile)) return;
-
-		const state =
-			item.parent?.file instanceof TFile
-				? {
-						match: {
-							content: item.content,
-							matches: item.matches,
-						},
-				}
-				: undefined;
-
-		this.initFileView(
-			file,
-			usesMarkdownView(this.plugin.app, file) ? state : undefined
-		);
-	}
-
-	private fileFromSearchClick(target: HTMLElement | null): TFile | null {
-		const view = this.searchLeaf.view as SearchView;
-		let el: HTMLElement | null = target;
-		while (el && !el.classList.contains("tree-item")) {
-			el = el.parentElement;
-		}
-		if (!el) return null;
-		const lookup = view.dom?.resultDomLookup as
-			| Map<TFile, { el?: HTMLElement }>
-			| undefined;
-		if (lookup) {
-			for (const [file, item] of lookup) {
-				if (item?.el && (item.el === el || el.contains(item.el) || item.el.contains(el))) {
-					return file;
-				}
-			}
-		}
-		const focused = view.dom?.focusedItem;
-		const focusedFile =
-			focused?.parent?.file instanceof TFile
-				? focused.parent.file
-				: focused?.file;
-		return focusedFile instanceof TFile ? focusedFile : null;
-	}
-
-	initContent() {
-		const { contentEl } = this;
-		contentEl.addEventListener(
-			"click",
-			(e) => {
-				if (!(this.searchCtnEl as Node).contains(e.target as Node)) {
-					return;
-				}
-				const file = this.fileFromSearchClick(e.target as HTMLElement);
-				if (!file || usesMarkdownView(this.plugin.app, file)) return;
-				e.preventDefault();
-				e.stopPropagation();
-				void openVaultFile(this.plugin.app, file, {
-					newTab: Keymap.isModEvent(e),
-				}).then(() => {
-					if (e.altKey || !this.fileLeaf) this.close();
-				});
-			},
-			true
-		);
-		contentEl.onclick = (e) => {
-			const resultElement = contentEl.getElementsByClassName(
-				"search-results-children"
-			)[0];
-			if (!resultElement || resultElement.children.length < 2) {
-				return;
-			}
-
-			let targetElement = e.target as HTMLElement | null;
-
-			if (e.altKey || !this.fileLeaf) {
-				while (targetElement) {
-					if (targetElement.classList.contains("tree-item-icon")) {
-						break;
-					}
-					if (
-						targetElement.classList.contains(
-							"search-result-hover-button"
-						)
-					) {
-						break;
-					}
-					if (targetElement.classList.contains("tree-item")) {
-						this.close();
-						break;
-					}
-					targetElement = targetElement.parentElement;
-				}
-				return;
-			}
-
-			if (this.fileLeaf) {
-				const currentView = this.searchLeaf.view as SearchView;
-
-				if (
-					(this.searchCtnEl as Node).contains(targetElement as Node)
-				) {
-					while (targetElement) {
-						if (targetElement.classList.contains("tree-item")) {
-							break;
-						}
-						targetElement = targetElement.parentElement;
-					}
-					if (!targetElement) return;
-
-					const file = this.fileFromSearchClick(targetElement);
-					if (file) {
-						const item = currentView.dom.resultDomLookup.get(file);
-						currentView.dom.setFocusedItem(item);
-						this.initFileView(file, undefined);
-						(
-							this.searchLeaf.view as SearchView
-						).searchComponent?.inputEl?.focus();
-					}
-				}
-
-				return;
-			}
-		};
-	}
-
-	private clearPreview() {
-		this.previewRequest++;
-		this.focusdItem = undefined;
-		this.fileState = undefined;
-		this.fileLeaf?.detach();
-		this.fileEmbeddedView?.unload();
-		this.fileLeaf = undefined;
-		this.fileEmbeddedView = undefined;
-		this.fileEl?.remove();
-		this.modalEl.removeClass("float-search-width");
-	}
-
-	async initFileView(file: TFile, state: any) {
-		if (this.closed) return;
-		const request = ++this.previewRequest;
-		this.previewQueue = this.previewQueue.catch(() => {}).then(async () => {
-			if (this.closed || request !== this.previewRequest) return;
-			await this.renderFileView(file, state, request);
-		});
-		await this.previewQueue;
-	}
-
-	private async renderFileView(file: TFile, state: any, request: number) {
-		if (this.fileLeaf) {
-			await openVaultFile(this.plugin.app, file, {
-				leaf: this.fileLeaf,
-				active: false,
-				eState: state,
-				preview: true,
-			});
-			if (this.closed || request !== this.previewRequest) return;
-
-			this.fileState = state;
-			setTimeout(() => {
-				if (this.closed || request !== this.previewRequest) return;
-				(
-					this.searchLeaf.view as SearchView
-				).searchComponent?.inputEl?.focus();
-			}, 0);
-
-			return;
-		}
-
-		const { contentEl } = this;
-		this.fileEl = contentEl.createDiv({
-			cls: "float-search-modal-file-ctn",
-		});
-		this.modalEl.toggleClass("float-search-width", true);
-		this.fileEl.onkeydown = (e) => {
-			if (e.ctrlKey && e.key === "g") {
-				e.preventDefault();
-				e.stopPropagation();
-
-				(
-					this.searchLeaf.view as SearchView
-				).searchComponent?.inputEl?.focus();
-			}
-
-			if (e.key === "Tab" && e.ctrlKey) {
-				e.preventDefault();
-				e.stopPropagation();
-
-				(
-					this.searchLeaf.view as SearchView
-				).searchComponent?.inputEl?.focus();
-			}
-		};
-
-		if (!this.fileEl) return;
-
-		const [createdLeaf, embeddedView] = spawnLeafView(
-			this.plugin,
-			this.fileEl
-		);
-		this.fileLeaf = createdLeaf;
-		this.fileEmbeddedView = embeddedView;
-
-		this.fileLeaf.setPinned(true);
-		await openVaultFile(this.plugin.app, file, {
-			leaf: this.fileLeaf,
-			active: false,
-			eState: state,
-			preview: true,
-		});
-		if (this.closed || request !== this.previewRequest) return;
-		this.fileState = state;
-
-		(this.searchLeaf.view as SearchView).searchComponent?.inputEl?.focus();
-	}
-}
-
-interface CmdkResult {
-	file: TFile;
-	nameMatch: SearchResult | null;
-	pathMatch: SearchResult | null;
-	heading?: string;
-	headingMatch?: SearchResult | null;
-	content?: string;
-	contentMatch?: SearchResult | null;
-	line?: number;
-	type: "file" | "heading" | "content" | "create";
-	createQuery?: string;
-}
-
-class FloatSearchCmdkModal extends SuggestModal<CmdkResult> {
-	plugin: FloatSearchPlugin;
-	private bodyEl: HTMLElement;
-	private isComposing = false;
-	private previewEl: HTMLElement | undefined;
-	private fileLeaf: WorkspaceLeaf | undefined;
-	private fileEmbeddedView: EmbeddedView | undefined;
-	private searchAbort: AbortController | null = null;
-	private readonly compositionStart = () => { this.isComposing = true; };
-	private readonly compositionEnd = () => {
-		this.isComposing = false;
-		this.updateSuggestions();
-	};
-	private closed = false;
-	private previewRequest = 0;
-	private previewQueue: Promise<void> = Promise.resolve();
-
-	constructor(plugin: FloatSearchPlugin) {
-		super(plugin.app);
-		this.plugin = plugin;
-		this.limit = 50;
-		const s = strings();
-		this.setPlaceholder(s.cmdkPlaceholder);
-		this.setInstructions([
-			{ command: "↑↓", purpose: s.cmdkNavigate },
-			{ command: "↵", purpose: s.cmdkOpen },
-			{ command: "Shift ↵", purpose: s.cmdkNewTab },
-			{ command: "esc", purpose: s.cmdkClose },
-		]);
-		this.modalEl.addClass("float-search-cmdk");
-		this.containerEl.addClass("float-search-cmdk-container");
-	}
-
-	onOpen() {
-		this.closed = false;
-		super.onOpen();
-		this.isComposing = false;
-		this.inputEl.addEventListener("compositionstart", this.compositionStart);
-		this.inputEl.addEventListener("compositionend", this.compositionEnd);
-		this.bodyEl = createDiv("float-search-cmdk-body");
-		this.modalEl.insertBefore(
-			this.bodyEl,
-			(this as any).resultContainerEl
-		);
-		this.bodyEl.appendChild((this as any).resultContainerEl);
-		const inputWrap = this.inputEl.closest(
-			".prompt-input-container"
-		) as HTMLElement | null;
-		if (inputWrap) {
-			mountFilterBar(inputWrap, this.plugin, () =>
-				this.updateSuggestions()
-			);
-		}
-	}
-
-	// Required by SuggestModal but unused — we drive the chooser directly
-	getSuggestions(_query: string): CmdkResult[] {
-		return [];
-	}
-
-	// Override to use progressive rendering via chooser.addSuggestion
-	updateSuggestions() {
-		if (this.closed || this.isComposing) return;
-		this.onSelectedChange.cancel();
-		this.hidePreview();
-		// Cancel previous in-flight search
-		this.searchAbort?.abort();
-		const abort = (this.searchAbort = new AbortController());
-		const { signal } = abort;
-
-		const chooser = (this as any).chooser;
-		const query = this.inputEl.value;
-
-		const bookmarks = this.plugin.settings.filterStarredOnly
-			? getBookmarkedPaths(this.app)
-			: null;
-		const files = this.app.vault.getFiles().filter((f: TFile) =>
-			isFileAllowed(this.plugin, f, bookmarks)
-		);
-
-		// Empty query — show recent files
-		if (!query.trim()) {
-			const recent = files
-				.sort((a: TFile, b: TFile) => b.stat.mtime - a.stat.mtime)
-				.slice(0, this.limit)
-				.map((file: TFile) => ({
-					file,
-					nameMatch: null,
-					pathMatch: null,
-					type: "file" as const,
-				}));
-			chooser.setSuggestions(recent);
-			return;
-		}
-
-		// Phase 1: file name/path (sync, instant)
-		const fileResults: CmdkResult[] = [];
-
-		for (const file of files) {
-			const nameMatch = matchAsSearchResult(
-				this.plugin,
-				file.basename,
-				query
-			);
-			const pathMatch = matchAsSearchResult(
-				this.plugin,
-				file.path,
-				query
-			);
-			if (nameMatch || pathMatch) {
-				fileResults.push({
-					file,
-					nameMatch,
-					pathMatch,
-					type: "file",
-				});
-			}
-		}
-
-		fileResults.sort((a, b) => {
-			const sa = Math.max(
-				a.nameMatch?.score ?? -Infinity,
-				(a.pathMatch?.score ?? -Infinity) * 0.5
-			);
-			const sb = Math.max(
-				b.nameMatch?.score ?? -Infinity,
-				(b.pathMatch?.score ?? -Infinity) * 0.5
-			);
-			return sb - sa;
-		});
-
-		// Check if there is an exact name match (for quick-create gating)
-		const queryLower = query.trim().toLowerCase();
-		const hasExactMatch = fileResults.some(
-			(r) => r.file.basename.toLowerCase() === queryLower
-		);
-
-		const resultsToShow = fileResults.slice(0, this.limit);
-
-		// Append "quick create" option when enabled and no exact match
-		if (
-			this.plugin.settings.cmdkQuickCreate &&
-			!hasExactMatch &&
-			query.trim().length > 0
-		) {
-			resultsToShow.push({
-				file: null as any,
-				nameMatch: null,
-				pathMatch: null,
-				type: "create",
-				createQuery: query.trim(),
-			});
-		}
-
-		// Render file results immediately
-		chooser.setSuggestions(resultsToShow);
-
-		// Phase 2: heading search — progressive, batched via setTimeout
-		if (query.trim().length >= 2) {
-			this.progressiveHeadingSearch(
-				files,
-				query,
-				chooser,
-				signal
-			);
-
-			// Phase 3: content search — progressive, async (reads file content)
-			this.progressiveContentSearch(
-				files,
-				query,
-				chooser,
-				signal
-			);
-		}
-	}
-
-	private progressiveHeadingSearch(
-		files: TFile[],
-		query: string,
-		chooser: any,
-		signal: AbortSignal
-	) {
-		const BATCH_SIZE = 50; // files per tick
-		let idx = 0;
-		let added = 0;
-		const MAX_HEADING_RESULTS = 20;
-
-		const processBatch = () => {
-			if (signal.aborted) return;
-
-			const end = Math.min(idx + BATCH_SIZE, files.length);
-			for (; idx < end; idx++) {
-				if (added >= MAX_HEADING_RESULTS) return;
-				const file = files[idx];
-				const cache =
-					this.app.metadataCache.getFileCache(file);
-				if (!cache?.headings) continue;
-
-				for (const h of cache.headings) {
-					const headingMatch = matchAsSearchResult(
-						this.plugin,
-						h.heading,
-						query
-					);
-					if (headingMatch) {
-						chooser.addSuggestion({
-							file,
-							nameMatch: null,
-							pathMatch: null,
-							heading: h.heading,
-							headingMatch,
-							type: "heading",
-						});
-						added++;
-						if (added >= MAX_HEADING_RESULTS) return;
-					}
-				}
-			}
-
-			// More files to process — yield to event loop
-			if (idx < files.length && added < MAX_HEADING_RESULTS) {
-				setTimeout(processBatch, 0);
-			}
-		};
-
-		// Start first batch on next microtask so file results render first
-		setTimeout(processBatch, 0);
-	}
-
-	private progressiveContentSearch(
-		files: TFile[],
-		query: string,
-		chooser: any,
-		signal: AbortSignal
-	) {
-		const BATCH_SIZE = 50;
-		const MAX_CONTENT_RESULTS = 20;
-		const DURATION_LIMIT = 5; // ms before yielding
-		const simpleSearch = (text: string) =>
-			matchAsSearchResult(this.plugin, text, query);
-		let idx = 0;
-		let added = 0;
-
-		const processBatch = async () => {
-			if (signal.aborted) return;
-			const start = performance.now();
-
-			for (; idx < files.length; idx++) {
-				if (signal.aborted || added >= MAX_CONTENT_RESULTS) return;
-
-				// Adaptive yielding: check time every BATCH_SIZE items
-				if (idx % BATCH_SIZE === 0 && idx > 0) {
-					if (performance.now() - start > DURATION_LIMIT) {
-						setTimeout(processBatch, 0);
-						return;
-					}
-				}
-
-				const file = files[idx];
-				if (file.extension !== "md") continue;
-
-				let text: string;
-				try {
-					text = await this.app.vault.cachedRead(file);
-				} catch {
-					continue;
-				}
-
-				if (signal.aborted || this.closed) return;
-				const result = simpleSearch(text);
-				if (!result) continue;
-
-				// Compute line number and context from first match offset
-				const matchStart = result.matches[0][0];
-				let line = 0;
-				let lineStart = 0;
-				for (let i = 0; i < matchStart; i++) {
-					if (text.charCodeAt(i) === 10) {
-						line++;
-						lineStart = i + 1;
-					}
-				}
-				let lineEnd = text.indexOf("\n", lineStart);
-				if (lineEnd === -1) lineEnd = text.length;
-				const lineText = text.substring(lineStart, lineEnd).trim();
-
-				// Recompute match on the line for highlight offsets
-				const lineMatch = simpleSearch(lineText);
-
-				chooser.addSuggestion({
-					file,
-					nameMatch: null,
-					pathMatch: null,
-					content: lineText,
-					contentMatch: lineMatch,
-					line,
-					type: "content",
-				} as CmdkResult);
-				added++;
-				if (added >= MAX_CONTENT_RESULTS) return;
-			}
-		};
-
-		// Start after heading search has a chance to render
-		setTimeout(processBatch, 50);
-	}
-
-	renderSuggestion(result: CmdkResult, el: HTMLElement) {
-		el.addClass("mod-complex");
-
-		if (result.type === "create") {
-			el.addClass("float-search-cmdk-create-item");
-			const contentEl = el.createDiv("suggestion-content");
-			const titleEl = contentEl.createDiv("suggestion-title");
-			titleEl.setText(strings().cmdkCreateNote);
-			const noteEl = contentEl.createDiv("suggestion-note");
-			const folder =
-				this.plugin.settings.cmdkQuickCreateFolder || "/";
-			noteEl.setText(
-				`"${result.createQuery}" → ${folder}`
-			);
-			const auxEl = el.createDiv("suggestion-aux");
-			const flair = auxEl.createSpan("suggestion-flair");
-			setIcon(flair, "plus");
-			return;
-		}
-
-		const contentEl = el.createDiv("suggestion-content");
-
-		if (result.type === "content" && result.content) {
-			const titleEl = contentEl.createDiv("suggestion-title");
-			if (result.contentMatch) {
-				renderResults(titleEl, result.content, result.contentMatch);
-			} else {
-				titleEl.setText(result.content);
-			}
-			const noteEl = contentEl.createDiv("suggestion-note");
-			noteEl.setText(result.file.path);
-		} else if (result.type === "heading" && result.heading) {
-			const titleEl = contentEl.createDiv("suggestion-title");
-			if (result.headingMatch) {
-				renderResults(titleEl, result.heading, result.headingMatch);
-			} else {
-				titleEl.setText(result.heading);
-			}
-			const noteEl = contentEl.createDiv("suggestion-note");
-			noteEl.setText(result.file.path);
-		} else {
-			const titleEl = contentEl.createDiv("suggestion-title");
-			if (result.nameMatch) {
-				renderResults(
-					titleEl,
-					result.file.basename,
-					result.nameMatch
-				);
-			} else {
-				titleEl.setText(result.file.basename);
-			}
-
-			const noteEl = contentEl.createDiv("suggestion-note");
-			const parentPath = result.file.parent?.path || "/";
-			if (result.pathMatch) {
-				renderResults(noteEl, parentPath, result.pathMatch);
-			} else {
-				noteEl.setText(parentPath);
-			}
-		}
-
-		if (result.file.extension !== "md") {
-			el.createDiv("suggestion-aux")
-				.createSpan("suggestion-flair")
-				.setText(result.file.extension);
-		}
-	}
-
-	onChooseSuggestion(
-		result: CmdkResult,
-		evt: MouseEvent | KeyboardEvent
-	) {
-		if (result.type === "create") {
-			this.quickCreateNote(result.createQuery ?? "", evt);
-			return;
-		}
-
-		const eState: Record<string, any> = {};
-		if (result.type === "heading" && result.heading) {
-			eState.subpath = "#" + result.heading;
-		} else if (result.type === "content" && result.line != null) {
-			eState.line = result.line;
-		}
-
-		void openVaultFile(this.app, result.file, {
-			newTab: Keymap.isModEvent(evt),
-			eState,
-		});
-	}
-
-	private async quickCreateNote(
-		content: string,
-		evt: MouseEvent | KeyboardEvent
-	) {
-		const settings = this.plugin.settings;
-		const fmt = settings.cmdkQuickCreateTitleFormat || "YYYYMMDDHHmmss";
-		const title = this.formatTimestamp(new Date(), fmt);
-
-		// Resolve target folder
-		let folderPath = settings.cmdkQuickCreateFolder.trim();
-		if (!folderPath || folderPath === "/") {
-			folderPath = "";
-		}
-		// Ensure folder exists
-		if (folderPath) {
-			const folder =
-				this.app.vault.getAbstractFileByPath(folderPath);
-			if (!folder) {
-				await this.app.vault.createFolder(folderPath);
-			}
-		}
-
-		const filePath = folderPath
-			? `${folderPath}/${title}.md`
-			: `${title}.md`;
-
-		const file = await this.app.vault.create(filePath, content);
-
-		const leaf = Keymap.isModEvent(evt)
-			? this.app.workspace.getLeaf("tab")
-			: this.app.workspace.getMostRecentLeaf() ??
-				this.app.workspace.getLeaf();
-
-		await leaf.setViewState({
-			type: "markdown",
-			state: { file: file.path },
-			active: true,
-		});
-	}
-
-	private formatTimestamp(date: Date, fmt: string): string {
-		const pad = (n: number, len = 2) =>
-			String(n).padStart(len, "0");
-		const tokens: Record<string, string> = {
-			YYYY: String(date.getFullYear()),
-			YY: String(date.getFullYear()).slice(-2),
-			MM: pad(date.getMonth() + 1),
-			DD: pad(date.getDate()),
-			HH: pad(date.getHours()),
-			mm: pad(date.getMinutes()),
-			ss: pad(date.getSeconds()),
-		};
-		let result = fmt;
-		// Replace longest tokens first to avoid partial matches
-		for (const token of ["YYYY", "YY", "MM", "DD", "HH", "mm", "ss"]) {
-			result = result.split(token).join(tokens[token]);
-		}
-		return result;
-	}
-
-	// Called by internal Chooser on selection change
-	// @ts-ignore
-	onSelectedChange = debounce(
-		(result: CmdkResult, _evt: Event | null) => {
-			if (result?.type === "create" || !result?.file) {
-				this.hidePreview();
-			} else {
-				this.showPreview(result);
-			}
-		},
-		100
-	);
-
-	private hidePreview() {
-		this.previewRequest++;
-		this.modalEl.removeClass("float-search-cmdk-expanded");
-		if (this.previewEl) {
-			this.previewEl.hide();
-		}
-	}
-
-	async showPreview(result: CmdkResult) {
-		if (this.closed) return;
-		this.previewEl?.hide();
-		const request = ++this.previewRequest;
-		this.previewQueue = this.previewQueue.catch(() => {}).then(async () => {
-			if (this.closed || request !== this.previewRequest) return;
-			await this.renderPreview(result, request);
-		});
-		await this.previewQueue;
-	}
-
-	private async renderPreview(result: CmdkResult, request: number) {
-		if (!this.previewEl) {
-			this.previewEl = this.bodyEl.createDiv(
-				"float-search-cmdk-preview"
-			);
-			const [leaf, view] = spawnLeafView(
-				this.plugin,
-				this.previewEl
-			);
-			this.fileLeaf = leaf;
-			this.fileEmbeddedView = view;
-			this.fileLeaf.setPinned(true);
-		}
-
-		this.previewEl.hide();
-
-		const file = result.file;
-		const eState: Record<string, any> = {};
-		if (result.type === "heading" && result.heading) {
-			eState.subpath = "#" + result.heading;
-		} else if (result.type === "content" && result.line != null) {
-			eState.line = result.line;
-		}
-
-		await openVaultFile(this.app, file, {
-			leaf: this.fileLeaf!,
-			active: false,
-			eState,
-			preview: true,
-		});
-		if (this.closed || request !== this.previewRequest) return;
-		if (eState.subpath || eState.line != null) {
-			this.fileLeaf?.setEphemeralState(eState);
-		}
-		this.previewEl.show();
-		this.modalEl.addClass("float-search-cmdk-expanded");
-
-		this.inputEl.focus();
-	}
-
-	onClose() {
-		this.closed = true;
-		this.searchAbort?.abort();
-		this.searchAbort = null;
-		this.onSelectedChange.cancel();
-		this.hidePreview();
-		setPreviewFile(null);
-		this.fileLeaf?.detach();
-		this.fileEmbeddedView?.unload();
-		this.fileLeaf = undefined;
-		this.fileEmbeddedView = undefined;
-		this.previewEl?.remove();
-		this.previewEl = undefined;
-		this.inputEl.removeEventListener("compositionstart", this.compositionStart);
-		this.inputEl.removeEventListener("compositionend", this.compositionEnd);
-	}
-}
-

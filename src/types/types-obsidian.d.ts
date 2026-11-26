@@ -11,7 +11,8 @@ import {
 	View,
 	WorkspaceLeaf,
 } from "obsidian";
-import { EmbeddedViewParent } from "../leafView";
+import type { EmbeddedViewParent } from "../leafView";
+import type { SearchResultDom } from "../searchResults";
 
 interface InternalPlugins {
 	switcher: QuickSwitcherPlugin;
@@ -101,7 +102,7 @@ declare module "obsidian" {
 
 		openWithDefaultApp(path: string): void;
 
-		dragManager: any;
+		dragManager?: { constructor: { prototype: object } };
 	}
 
 	interface ViewRegistry {
@@ -129,8 +130,12 @@ declare module "obsidian" {
 		removeChild(leaf: WorkspaceLeaf, resize?: boolean): void;
 
 		containerEl: HTMLElement;
-		children: any;
-		parent: any;
+		children: WorkspaceItem[];
+	}
+
+	/** The parent of the popout windows. */
+	interface WorkspaceFloating {
+		children: WorkspaceWindow[];
 	}
 
 	interface MarkdownEditView {
@@ -190,9 +195,10 @@ declare module "obsidian" {
 		onLayoutChange(): void; // tell Obsidian leaves have been added/removed/etc.
 		activeLeafEvents(): void;
 
-		floatingSplit: any;
+		/** Missing where there are no popout windows, as on mobile. */
+		floatingSplit?: WorkspaceFloating;
 
-		pushUndoHistory(leaf: WorkspaceLeaf, id: string, e: any): void;
+		pushUndoHistory(leaf: WorkspaceLeaf, id: string, ...args: unknown[]): void;
 	}
 
 	interface Editor {
@@ -239,9 +245,10 @@ declare module "obsidian" {
 
 		onKeyShowMoreAfter(e: KeyboardEvent): void;
 
-		dom: any;
+		dom: SearchResultDom;
 		searchComponent: SearchComponent;
-		headerDom: any;
+		startSearch?(): void;
+		matchingCaseButtonEl?: HTMLElement;
 	}
 
 	interface EmptyView extends View {

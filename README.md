@@ -1,179 +1,100 @@
-<p align="center">
-  <img src="media/banner.jpg" alt="Float Search Window banner" width="720">
-</p>
-
-<p align="center">
-  <a href="README.md"><img alt="中文" src="https://img.shields.io/badge/lang-%E4%B8%AD%E6%96%87-red?style=flat-square"></a>
-  <a href="README_en.md"><img alt="English" src="https://img.shields.io/badge/lang-English-blue?style=flat-square"></a>
-  <a href="https://github.com/AiurArtanis/Obsidian-Float-Search-Window/stargazers"><img alt="stars" src="https://img.shields.io/github/stars/AiurArtanis/Obsidian-Float-Search-Window?style=flat-square"></a>
-  <a href="https://github.com/AiurArtanis/Obsidian-Float-Search-Window/network/members"><img alt="forks" src="https://img.shields.io/github/forks/AiurArtanis/Obsidian-Float-Search-Window?style=flat-square"></a>
-  <img alt="last commit" src="https://img.shields.io/github/last-commit/AiurArtanis/Obsidian-Float-Search-Window?color=blue&style=flat-square">
-  <a href="LICENSE"><img alt="license" src="https://img.shields.io/github/license/AiurArtanis/Obsidian-Float-Search-Window?color=blue&style=flat-square"></a>
-  <a href="https://github.com/AiurArtanis/Obsidian-Float-Search-Window/releases"><img alt="release" src="https://img.shields.io/github/v/release/AiurArtanis/Obsidian-Float-Search-Window?style=flat-square"></a>
-  <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-3178C6?style=flat-square&logo=typescript&logoColor=white">
-  <img alt="Obsidian" src="https://img.shields.io/badge/Obsidian-plugin-8A5CF5?logo=obsidian&logoColor=white&style=flat-square">
-</p>
+<img src="./media/float-search-window.svg" width="72" height="72" alt="Float Search Window 标志">
 
 # Float Search Window
 
-把 Obsidian 自带的搜索视图放到浮动弹窗、分栏、标签页或独立窗口里用。本仓库面向 Windows 与中文输入法继续维护。
+在当前笔记上方打开 Obsidian 原生搜索。用 `path:` 或 `tag:` 缩小范围，选中结果就能在一旁预览原文。想按文件名、标题或正文快速跳转时，双击 `Shift` 打开快速搜索；用中文输入法时，快速搜索会等到选词上屏后再更新结果。
 
-[中文](README.md) | [English](README_en.md)
+[English](./README_en.md) · [安装](#安装) · [命令与快捷键](#命令与快捷键)
 
-本仓库继承自 [Quorafind/Obsidian-Float-Search](https://github.com/Quorafind/Obsidian-Float-Search)（作者 [Boninall](https://github.com/Quorafind)）。原作者已停止维护，这里从上游 4.3.0 起继续维护。请给上游也点星。问题请优先在本仓库开 issue。
+**[下载最新发布版](https://github.com/AiurArtanis/Obsidian-Float-Search-Window/releases/latest)。** 1.3.0 适配 Obsidian 1.15.1 的相关性排序，并改进原生文件打开、正则搜索和预览。[1.3.0 版本说明](./RELEASE_NOTES_1.3.0.md)
 
-## 📖 目录
+![左侧是“旅行”的搜索结果，右侧预览《周末旅行计划》](./media/img.jpg)
 
-- [演示](#演示)
-- [功能](#-功能)
-- [相对原版新增](#相对原版新增)
-- [安装](#-安装)
-- [使用](#使用)
-- [快捷键](#️-快捷键)
-- [设置](#设置)
-- [致谢](#-致谢)
-- [许可证](#许可证)
-- [点星](#-点星)
+*Obsidian 1.14.4 · Float Search Window 1.2.0 · 公开演示库中的合成笔记。*
 
-## 演示
+## 安装
 
-浮动搜索弹窗：
+本插件使用独立 ID `float-search-window`，目前通过 GitHub Release 或 BRAT 安装。若此前启用了原版 **Floating Search**（`float-search`），请先将其停用，避免两个插件同时响应搜索操作。
 
-<p align="center">
-  <img src="media/img.png" alt="浮动搜索弹窗截图" width="720">
-</p>
+**手动安装**
 
-## ✨ 功能
+1. 从[最新 Release](https://github.com/AiurArtanis/Obsidian-Float-Search-Window/releases/latest) 的 **Assets** 下载 `main.js`、`manifest.json`、`styles.css`。
+2. 将三个文件放入库内的 `.obsidian/plugins/float-search-window/`。如果自定义过配置目录，请将 `.obsidian` 换成该目录名。
+3. 重新加载 Obsidian，在 **设置 → 第三方插件** 中启用 **Float Search Window**。
 
-- 用弹窗、侧边栏、分栏、标签页或独立窗口打开 Obsidian 原生搜索
-- 双击 `Shift`（可改）打开 CMDK 快速搜索：文件名、标题、正文，可预览并跳到命中位置
-- 中文输入法组字完成后再搜索，不在拼音过程中打断
-- 按类型筛选数据库、白板，并可只看收藏
-- 大小写敏感、正则表达式（VSCode 式图标开关）
-- 搜索结果可在弹窗右侧预览，再决定打开位置
-- 右键选中文本即可搜索
-- 外部用 `obsidian://fs?query=关键词` 唤起
-- 快速搜索里可按时间戳文件名新建笔记
+**通过 BRAT 安装**　安装并启用 [BRAT](https://github.com/TfTHacker/obsidian42-brat)，在其设置中添加仓库 `AiurArtanis/Obsidian-Float-Search-Window`，选择已发布的版本，然后启用 **Float Search Window**。
 
-## 相对原版新增
+## 搜索与筛选
 
-相对 [Floating Search 4.3.0](https://github.com/Quorafind/Obsidian-Float-Search) 多出来的部分：
+| 入口 | 怎么用 |
+| --- | --- |
+| 原生浮动搜索 | 在命令面板运行 **Float Search Window: 全局搜索**。可用 Obsidian 的查询语法，例如 `path:demo 旅行`。按方向键选择命中，按 `Tab` 预览原文。也可在编辑器中选中文字，右键发起搜索。 |
+| 快速搜索（CMDK） | 双击 `Shift`，输入文件名、标题或正文片段。用 `↑`、`↓` 选择结果，`Enter` 打开；选择标题或正文命中会跳到对应位置。按 `Esc` 关闭。 |
 
-| 项 | 说明 |
-|---|---|
-| 中文输入法 | 组字过程中不提前查询，避免拼音吞字、乱序 |
-| 中英界面 | 跟随 Obsidian 语言，设置、命令、按键说明都会切换 |
-| 分段设置页 | 常规 / 快速搜索 / 快速新建 三个 tab |
-| 多功能筛选 | 数据库、白板复选；全部 / 只看收藏分段按钮；Aa 与正则 |
-| 独立插件 id | `float-search-window`，不会被官方 `float-search` 覆盖 |
+两个入口的筛选栏都可以勾选是否包含数据库（Bases）和白板（Canvas），在**全部**与**只看收藏**的文件间切换，并用 **Aa** 区分大小写、用 `.*` 切换正则。启用 Obsidian 的书签核心插件后，可以按已加书签的文件筛选。
 
-全局搜索弹窗的过滤行：
+<details>
+<summary>查看原生搜索与快速搜索的筛选栏</summary>
 
-<p align="center">
-  <img src="media/filter-global.png" alt="全局搜索过滤行" width="720">
-</p>
+**原生搜索** · 按路径限定搜索后，左侧显示正文匹配。
 
-快速浮窗（双击 Shift）同样有这一行：
+![原生搜索包含数据库、白板、收藏、大小写和正则开关](./media/filter-global.jpg)
 
-<p align="center">
-  <img src="media/filter-cmdk.png" alt="快速搜索过滤行" width="720">
-</p>
+**快速搜索** · 选择《阅读清单》后，右侧显示对应笔记。
 
-## 📦 安装
+![快速搜索左侧列出合成笔记，右侧预览《阅读清单》的正文](./media/filter-cmdk.jpg)
 
-本仓库目前不在官方社区插件列表中。插件 id 是 `float-search-window`，与官方 Floating Search（`float-search`）互不覆盖。
+</details>
 
-### BRAT
+## 命令与快捷键
 
-1. 安装 [BRAT](https://github.com/TfTHacker/obsidian42-brat)
-2. 添加 `AiurArtanis/Obsidian-Float-Search-Window`
-3. 启用 **Float Search Window**，并关闭官方 **Floating Search**（如果还开着）
+在命令面板或 **设置 → 快捷键** 中搜索 `Float Search`。命令默认不绑定热键，快速搜索的双击触发键可单独设置。
 
-### 手动
+| 命令 | 用途 |
+| --- | --- |
+| 全局搜索 | 从空查询开始。 |
+| 全局搜索（保留上次关键字） | 恢复最近的搜索词，约 30 秒后清空。 |
+| 在当前文件中搜索 / 搜索当前文件的反向链接 | 将搜索范围限定到当前文件，或查找指向它的链接。 |
+| 打开搜索视图（分栏 / 标签页 / 窗口） | 在指定位置打开原生搜索。 |
+| 显示/隐藏文件路径 | 切换结果列表中的路径。 |
+| 搜索运算符命令 | 插入文件名、路径、标签、行、块、段落、任务或属性等查询条件。 |
 
-1. 从 [Releases](https://github.com/AiurArtanis/Obsidian-Float-Search-Window/releases) 下载 `main.js`、`manifest.json`、`styles.css`
-2. 放到 `{vault}/.obsidian/plugins/float-search-window/`
-3. 重载已安装插件，然后启用
+<details>
+<summary>查看原生浮窗的 Windows 键位与鼠标操作</summary>
 
-## 使用
+| 搜索框内的操作 | 效果 |
+| --- | --- |
+| `↑` / `↓` | 选择上一条 / 下一条结果。 |
+| `Shift+↑` / `Shift+↓` | 折叠 / 展开匹配项。 |
+| `Enter` / `Ctrl+Enter` | 后台打开 / 在新的后台标签页打开。 |
+| `Alt+Enter` / `Ctrl+Shift+Alt+Enter` | 打开并关闭浮窗 / 在新窗口打开并关闭浮窗。 |
+| `Tab` / `Shift+Tab` | 打开 / 关闭右侧预览。 |
+| `Ctrl+Shift+C` | 复制选中结果的文字。 |
+| `Ctrl+E` / `Ctrl+G` | 切换预览的阅读模式 / 在搜索框与预览之间切换焦点。 |
 
-### 命令
+预览打开时，点击结果会切换预览，按住 `Alt` 点击会打开文件并关闭浮窗。预览关闭时，点击结果会打开文件并关闭浮窗。
 
-| 命令 | 作用 |
-|---|---|
-| 全局搜索 | 每次打开清空关键字 |
-| 全局搜索（保留上次关键字） | 保留上次关键字，约 30 秒后清空 |
-| 在当前文件中搜索 | 只搜当前文件 |
-| 搜索当前文件的反向链接 | 搜指向当前文件的反链 |
-| 打开搜索视图（分栏 / 标签页 / 窗口） | 在分栏 / 标签 / 新窗口打开搜索 |
-| 显示/隐藏文件路径 | 切换结果里是否显示路径 |
+</details>
 
-没有默认命令热键。到 **设置 → 快捷键** 搜索 `Float Search` 自行绑定。
+## 设置与 URI
 
-### 弹窗内操作
+设置页跟随 Obsidian 的界面语言，支持中文和英文。
 
-光标在搜索框时：
+- **常规**　选择默认打开位置（弹窗、侧边栏、分栏、标签页或窗口），并设置是否显示文件路径和按键提示。
+- **快速搜索**　将双击触发键设为 `Shift`、`Ctrl`、`Alt`、`Meta` 或关闭。两次按键的默认最大间隔为 300 毫秒。
+- **快速新建**　开启后，若快速搜索没有精确匹配，可以用查询文字作为正文新建笔记。目录和时间戳文件名格式均可设置。
 
-- `↑` `↓` 切换结果；`Shift+↑/↓` 展开或折叠
-- `Enter` 后台打开；`Ctrl+Enter` 后台新标签打开；`Alt+Enter` 打开并关弹窗
-- `Ctrl+Shift+Alt+Enter` 新窗口打开并关弹窗
-- `Tab` 右侧预览，`Shift+Tab` 关闭预览
-- `Ctrl+Shift+C` 复制当前结果
-- 预览时 `Ctrl+E` 切换阅读模式；`Ctrl+G` 在输入框和预览之间跳转
+用 URI 从其他应用发起搜索。例如，第一条打开浮窗，第二条打开标签页。
 
-有预览时，鼠标点击结果只换预览文件；`Alt+点击` 打开并关弹窗。没有预览时，点击结果会打开文件并关弹窗。
-
-### URI
-
-```
+```text
 obsidian://fs?query=hello
 obsidian://fs?query=world&viewType=tab
 ```
 
-`viewType` 可为 `modal`（默认）、`sidebar`、`split`、`tab`、`window`。
+`viewType` 支持 `modal`（默认）、`sidebar`、`split`、`tab`、`window`。包含空格或其他特殊字符时，请对 `query` 的值进行 URL 编码。
 
-## ⌨️ 快捷键
+## 原作者与许可
 
-| 操作 | 默认 | 说明 |
-|---|---|---|
-| 打开 CMDK 快速搜索 | 双击 `Shift` | 可在设置里改成 Ctrl / Alt / Meta，或关闭 |
+Float Search Window 是 **Boninall（Quorafind）** 创作的 **Floating Search** 的独立续作，由 AiurArtanis 自上游 4.3.0 起维护。原作者已书面同意将本 fork（`float-search-window`）提交到社区目录，并要求保留原作者署名。[上游仓库](https://github.com/Quorafind/Obsidian-Float-Search) · [原作者许可](https://github.com/Quorafind/Obsidian-Float-Search/issues/87#issuecomment-7038819917)
 
-弹窗内键位见上一节。命令热键需自己绑定。
-
-<details>
-<summary><strong>展开完整弹窗键位</strong></summary>
-
-| 键 | 作用 |
-|---|---|
-| `↑` `↓` | 切换结果 |
-| `Shift+↑/↓` | 展开 / 折叠 |
-| `Enter` | 后台打开 |
-| `Ctrl+Enter` | 后台新标签打开 |
-| `Alt+Enter` | 打开并关弹窗 |
-| `Ctrl+Shift+Alt+Enter` | 新窗口打开并关弹窗 |
-| `Tab` / `Shift+Tab` | 打开 / 关闭预览 |
-| `Ctrl+Shift+C` | 复制结果 |
-| `Ctrl+E` | 预览阅读模式 |
-| `Ctrl+G` | 输入框 ↔ 预览 |
-| `Alt+点击` | 打开并关弹窗 |
-
-</details>
-
-## 设置
-
-- **常规**：默认视图、是否显示路径、是否显示按键说明
-- **快速搜索**：双击哪个键打开 CMDK、两次按键的最大间隔（默认 300ms）
-- **快速新建**：无精确匹配时用搜索词建笔记，以及目录和时间戳文件名格式
-
-## 🙏 致谢
-
-- [Boninall / Quorafind](https://github.com/Quorafind) 与 [Obsidian-Float-Search](https://github.com/Quorafind/Obsidian-Float-Search)
-- [obsidian-hover-editor](https://github.com/nothingislost/obsidian-hover-editor) 的嵌入 leaf 实现
-
-## 许可证
-
-[GPL-3.0](LICENSE)。版权与上游关系见 [NOTICE](NOTICE)。
-
-## ⭐ 点星
-
-如果这个项目对你有用，请给仓库点一个 star。
+嵌入式预览的工作区视图实现借鉴了 [Hover Editor](https://github.com/nothingislost/obsidian-hover-editor)。本仓库以 [GPL-3.0](./LICENSE) 发布，版权与上游关系见 [NOTICE](./NOTICE)。
