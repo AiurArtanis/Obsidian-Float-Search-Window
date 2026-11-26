@@ -1,15 +1,10 @@
 import { App, PaneType, TFile, WorkspaceLeaf } from "obsidian";
 import { isExcalidrawFile } from "./filterBar";
 
-const previewSuppress = new Set<string>();
+const previewSuppress = new Map<string, number>();
 
 export function isPreviewSuppressed(path: string): boolean {
 	return previewSuppress.has(path);
-}
-
-export function setPreviewFile(path: string | null): void {
-	previewSuppress.clear();
-	if (path) previewSuppress.add(path);
 }
 
 export function viewTypeForFile(app: App, file: TFile): string {
@@ -37,8 +32,6 @@ export async function openVaultFile(
 		preview?: boolean;
 	}
 ): Promise<WorkspaceLeaf | undefined> {
-	if (opts?.preview) setPreviewFile(file.path);
-
 	const newTab = opts?.newTab;
 	const leaf =
 		opts?.leaf ??
@@ -47,32 +40,41 @@ export async function openVaultFile(
 			: app.workspace.getMostRecentLeaf() ?? app.workspace.getLeaf());
 	if (!leaf) return;
 
-	const type = viewTypeForFile(app, file);
-	const markdown = type === "markdown";
-	await leaf.openFile(file, {
-		active: opts?.active ?? true,
-		eState: markdown ? opts?.eState : undefined,
-	});
-
-	const actual =
-		typeof leaf.view?.getViewType === "function"
-			? leaf.view.getViewType()
-			: undefined;
-	if (actual === "markdown" && type !== "markdown") {
-		await leaf.setViewState({
-			type,
-			state: { file: file.path },
+	if (opts?.preview) previewSuppress.set(file.path, (previewSuppress.get(file.path) ?? 0) + 1);
+	try {
+		const type = viewTypeForFile(app, file);
+		const markdown = type === "markdown";
+		await leaf.openFile(file, {
 			active: opts?.active ?? true,
+			eState: markdown ? opts?.eState : undefined,
 		});
-	}
-	if (opts?.eState && actual === "markdown" && type !== "markdown") {
-		leaf.setEphemeralState(opts.eState);
-	} else if (
-		!opts?.preview &&
-		opts?.eState &&
-		(opts.eState.subpath || opts.eState.line != null)
-	) {
-		leaf.setEphemeralState(opts.eState);
+
+		const actual =
+			typeof leaf.view?.getViewType === "function"
+				? leaf.view.getViewType()
+				: undefined;
+		if (actual === "markdown" && type !== "markdown") {
+			await leaf.setViewState({
+				type,
+				state: { file: file.path },
+				active: opts?.active ?? true,
+			});
+		}
+		if (opts?.eState && actual === "markdown" && type !== "markdown") {
+			leaf.setEphemeralState(opts.eState);
+		} else if (
+			!opts?.preview &&
+			opts?.eState &&
+			(opts.eState.subpath || opts.eState.line != null)
+		) {
+			leaf.setEphemeralState(opts.eState);
+		}
+	} finally {
+		if (opts?.preview) {
+			const remaining = (previewSuppress.get(file.path) ?? 1) - 1;
+			if (remaining) previewSuppress.set(file.path, remaining);
+			else previewSuppress.delete(file.path);
+		}
 	}
 
 	return leaf;

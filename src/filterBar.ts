@@ -25,26 +25,56 @@ export interface FilterHost {
 	app: App;
 }
 
-const CASE_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M90.86,50.89a12,12,0,0,0-21.72,0l-64,136a12,12,0,0,0,21.71,10.22L42.44,164h75.12l15.58,33.11a12,12,0,0,0,21.72-10.22ZM53.74,140,80,84.18,106.27,140ZM200,84c-13.85,0-24.77,3.86-32.45,11.48a12,12,0,1,0,16.9,17c3-3,8.26-4.52,15.55-4.52,11,0,20,7.18,20,16v4.39A47.28,47.28,0,0,0,200,124c-24.26,0-44,17.94-44,40s19.74,40,44,40a47.18,47.18,0,0,0,22-5.38A12,12,0,0,0,244,192V124C244,101.94,224.26,84,200,84Zm0,96c-11,0-20-7.18-20-16s9-16,20-16,20,7.18,20,16S211,180,200,180Z"/></svg>`;
+const CASE_PATH = "M90.86,50.89a12,12,0,0,0-21.72,0l-64,136a12,12,0,0,0,21.71,10.22L42.44,164h75.12l15.58,33.11a12,12,0,0,0,21.72-10.22ZM53.74,140,80,84.18,106.27,140ZM200,84c-13.85,0-24.77,3.86-32.45,11.48a12,12,0,1,0,16.9,17c3-3,8.26-4.52,15.55-4.52,11,0,20,7.18,20,16v4.39A47.28,47.28,0,0,0,200,124c-24.26,0-44,17.94-44,40s19.74,40,44,40a47.18,47.18,0,0,0,22-5.38A12,12,0,0,0,244,192V124C244,101.94,224.26,84,200,84Zm0,96c-11,0-20-7.18-20-16s9-16,20-16,20,7.18,20,16S211,180,200,180Z";
+const REGEX_PATH = "M212.45,107.14l-65.19,26.08,46.21,59.41a12,12,0,1,1-18.94,14.74L128,147.55,81.47,207.37a12,12,0,0,1-18.94-14.74l46.21-59.41L43.55,107.14a12,12,0,1,1,8.91-22.28L116,110.28V40a12,12,0,0,1,24,0v70.28l63.54-25.42a12,12,0,1,1,8.91,22.28Z";
 
-const REGEX_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><circle cx="46" cy="128" r="22"/><g transform="translate(48 8) scale(0.78)"><path d="M212.45,107.14l-65.19,26.08,46.21,59.41a12,12,0,1,1-18.94,14.74L128,147.55,81.47,207.37a12,12,0,0,1-18.94-14.74l46.21-59.41L43.55,107.14a12,12,0,1,1,8.91-22.28L116,110.28V40a12,12,0,0,1,24,0v70.28l63.54-25.42a12,12,0,1,1,8.91,22.28Z"/></g></svg>`;
+function drawFilterIcon(button: HTMLButtonElement, kind: "case" | "regex") {
+	const doc = button.ownerDocument;
+	const ns = "http://www.w3.org/2000/svg";
+	const svg = doc.createElementNS(ns, "svg");
+	svg.setAttribute("viewBox", "0 0 256 256");
+	svg.setAttribute("fill", "currentColor");
+	svg.setAttribute("aria-hidden", "true");
+	const path = doc.createElementNS(ns, "path");
+	path.setAttribute("d", kind === "case" ? CASE_PATH : REGEX_PATH);
+	if (kind === "regex") {
+		const circle = doc.createElementNS(ns, "circle");
+		circle.setAttribute("cx", "46");
+		circle.setAttribute("cy", "128");
+		circle.setAttribute("r", "22");
+		svg.appendChild(circle);
+		path.setAttribute("transform", "translate(48 8) scale(0.78)");
+	}
+	svg.appendChild(path);
+	button.appendChild(svg);
+}
+
+interface BookmarkItem {
+	type?: string;
+	path?: string;
+	items?: BookmarkItem[];
+	children?: BookmarkItem[];
+}
+
+interface Bookmarks {
+	getBookmarks?(): BookmarkItem[];
+}
 
 export function getBookmarkedPaths(app: App): Set<string> {
 	const paths = new Set<string>();
-	const inst =
-		(app as any).internalPlugins?.getEnabledPluginById?.("bookmarks") ??
-		(app as any).internalPlugins?.plugins?.bookmarks?.instance;
-	if (!inst) return paths;
-	const items = inst.getBookmarks?.() ?? [];
-	const walk = (item: any) => {
+	const plugins = app.internalPlugins as {
+		getEnabledPluginById?(id: "bookmarks"): Bookmarks | undefined;
+		plugins?: { bookmarks?: { instance?: Bookmarks } };
+	} | undefined;
+	const instance = plugins?.getEnabledPluginById?.("bookmarks") ??
+		plugins?.plugins?.bookmarks?.instance;
+	const walk = (item: BookmarkItem) => {
 		if (!item) return;
-		if (item.type === "file" && typeof item.path === "string") {
-			paths.add(item.path);
-		}
-		if (Array.isArray(item.items)) item.items.forEach(walk);
-		if (Array.isArray(item.children)) item.children.forEach(walk);
+		if (item.type === "file" && typeof item.path === "string") paths.add(item.path);
+		item.items?.forEach(walk);
+		item.children?.forEach(walk);
 	};
-	if (Array.isArray(items)) items.forEach(walk);
+	instance?.getBookmarks?.()?.forEach(walk);
 	return paths;
 }
 
@@ -144,6 +174,7 @@ export function bindNativeRegexSearch(
 	const unpatch = around(target, {
 		startSearch(old) {
 			return function () {
+				// eslint-disable-next-line @typescript-eslint/unbound-method -- Restore the exact original and call with its original receiver.
 				const getValue = component.getValue;
 				// startSearch reads its query synchronously, before requesting layout saves.
 				// Restore on the first read so state/history always retain the user's input.
@@ -229,8 +260,9 @@ export function applyNativeResultFilters(
 	const bookmarks = plugin.settings.filterStarredOnly
 		? getBookmarkedPaths(plugin.app)
 		: null;
-		const dom = (view as any).dom;
-	const children: any[] =
+		const dom = view.dom;
+	const children =
+		dom?.vChildren?.children ??
 		dom?.vChildren?._children ??
 		dom?.children ??
 		[];
@@ -270,8 +302,7 @@ export function mountFilterBar(
 	onChange: () => void
 ): HTMLElement {
 	const s = strings();
-	const row = document.createElement("div");
-	row.className = "float-search-filter-row";
+	const row = anchor.createDiv("float-search-filter-row");
 
 	const addCheck = (
 		label: string,
@@ -282,10 +313,10 @@ export function mountFilterBar(
 		const input = wrap.createEl("input", { type: "checkbox" });
 		input.checked = get();
 		wrap.appendText(label);
-		input.addEventListener("change", async () => {
+		input.addEventListener("change", () => {
 			set(input.checked);
-			await plugin.saveSettings();
 			onChange();
+			void plugin.saveSettings();
 		});
 	};
 
@@ -357,7 +388,7 @@ export function mountFilterBar(
 
 	const addIcon = (
 		label: string,
-		svg: string,
+		kind: "case" | "regex",
 		get: () => boolean,
 		set: (v: boolean) => void
 	) => {
@@ -366,7 +397,7 @@ export function mountFilterBar(
 		btn.setAttribute("aria-label", label);
 		btn.setAttribute("aria-pressed", get() ? "true" : "false");
 		if (get()) btn.addClass("is-active");
-		btn.innerHTML = svg;
+		drawFilterIcon(btn, kind);
 		btn.onclick = async () => {
 			const next = !get();
 			set(next);
@@ -379,7 +410,7 @@ export function mountFilterBar(
 
 	addIcon(
 		s.filterMatchCase,
-		CASE_SVG,
+		"case",
 		() => plugin.settings.filterMatchCase,
 		(v) => {
 			plugin.settings.filterMatchCase = v;
@@ -387,7 +418,7 @@ export function mountFilterBar(
 	);
 	addIcon(
 		s.filterRegex,
-		REGEX_SVG,
+		"regex",
 		() => plugin.settings.filterUseRegex,
 		(v) => {
 			plugin.settings.filterUseRegex = v;
@@ -402,6 +433,33 @@ export function watchNativeSearchResults(
 	view: SearchView,
 	plugin: FilterHost
 ): () => void {
+	// Keep excluded files out of the native virtual tree and keyboard targets.
+	// Old SearchView implementations without this seam still use DOM filtering.
+	const dom = view.dom;
+	if (typeof dom?.addResult === "function" &&
+		typeof dom.removeResult === "function" && typeof view.startSearch === "function") {
+		let bookmarks: Set<string> | null = null;
+		const refresh = around(view as SearchView & { startSearch(): void }, {
+			startSearch(old) {
+				return function (this: SearchView) {
+					bookmarks = plugin.settings.filterStarredOnly ? getBookmarkedPaths(plugin.app) : null;
+					old.call(this);
+				};
+			},
+		});
+		const filter = around(dom, {
+			addResult(old) {
+				return function (this: typeof dom, file, ...args) {
+					if (file instanceof TFile && !isFileAllowed(plugin, file, bookmarks)) {
+						this.removeResult?.(file);
+						return undefined;
+					}
+					return old?.call(this, file, ...args);
+				};
+			},
+		});
+		return () => { filter(); refresh(); };
+	}
 	const run = debounce(
 		() => applyNativeResultFilters(view, plugin),
 		50,

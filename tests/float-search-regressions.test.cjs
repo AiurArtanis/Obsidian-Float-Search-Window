@@ -506,10 +506,10 @@ test('native clear-button callback clears preview and searches immediately witho
 test('plugin unload closes both the native search and CMDK modal', () => {
   const h = createHarness();
   const closed = [];
-  h.default.prototype.onunload.call({
+  h.default.prototype.onunload.call(Object.assign(new h.default(), {
     modal: { close() { closed.push('native'); } },
     cmdkModal: { close() { closed.push('cmdk'); } },
-  });
+  }));
   assert.deepEqual(closed.sort(), ['cmdk', 'native']);
 });
 
@@ -681,4 +681,195 @@ test('a preview invalidated by an empty result set never becomes visible when it
   assert.equal(lateShows, 0);
   assert.equal(previewEl.hidden, true);
   assert.equal(modal.modalEl.hasClass('float-search-cmdk-expanded'), false);
+});
+
+test('native relevance reaches the 1.15.1 SearchView and is restored after a legacy fallback', async () => {
+  for (const [apiVersion, sortOrder] of [['1.15.1', 'byRelevance'], ['1.7.1', 'alphabetical']]) {
+    const h = createHarness({ apiVersion });
+    const leaf = h.makeLeaf();
+    h.leafModule.nextLeaf = leaf;
+    let saved;
+    const modal = new h.FloatSearchModal((state) => { saved = state; }, h.plugin,
+      { query: 'needle', sortOrder: 'byRelevance' });
+    await modal.initSearchView(new ElementStub());
+    assert.equal(leaf.viewStates[0].state.sortOrder, sortOrder);
+    leaf.view.getState = () => ({ query: 'needle', sortOrder });
+    modal.onClose();
+    assert.equal(saved.sortOrder, 'byRelevance');
+  }
+});
+
+test('virtual search filtering excludes files before they enter the native keyboard targets', () => {
+  const h = createHarness();
+  const note = new h.TFile('note.md');
+  const canvas = new h.TFile('board.canvas');
+  const results = new Map();
+  h.plugin.settings.filterIncludeNotes = false;
+  const dom = {
+    addResult(file, match) { results.set(file.path, match); },
+    removeResult(file) { results.delete(file.path); },
+  };
+  const view = { dom, startSearch() {
+    dom.addResult(note, 'note match');
+    dom.addResult(canvas, 'canvas match');
+  } };
+  const cleanup = h.filters.watchNativeSearchResults(view, h.plugin);
+  view.startSearch();
+  assert.deepEqual([...results.keys()], [canvas.path]);
+  h.plugin.settings.filterIncludeNotes = true;
+  view.startSearch();
+  assert.equal(results.get(note.path), 'note match');
+  cleanup();
+  h.plugin.settings.filterIncludeNotes = false;
+  view.startSearch();
+  assert.equal(results.get(note.path), 'note match');
+});
+
+test('suppression lasts through overlapping preview opens and clears before an explicit open', async () => {
+  const h = createHarness();
+  const { openVaultFile, isPreviewSuppressed } = h.load('openFile');
+  const file = new h.TFile('preview.md');
+  const a = h.makeLeaf(), b = h.makeLeaf();
+  const first = deferred(), second = deferred();
+  a.openFile = () => first.promise;
+  b.openFile = () => second.promise;
+  const p1 = openVaultFile(h.app, file, { leaf: a, preview: true });
+  const p2 = openVaultFile(h.app, file, { leaf: b, preview: true });
+  assert.equal(isPreviewSuppressed(file.path), true);
+  first.resolve();
+  await p1;
+  assert.equal(isPreviewSuppressed(file.path), true);
+  second.resolve();
+  await p2;
+  assert.equal(isPreviewSuppressed(file.path), false);
+  await openVaultFile(h.app, file, { leaf: h.mainLeaf });
+  assert.equal(h.mainLeaf.opened.length, 1);
+});
+
+test('native delayed initialization keeps input typed before its timer', async () => {
+  const h = createHarness();
+  const leaf = h.makeLeaf();
+  let writes = 0;
+  leaf.view.setState = async () => { writes++; };
+  h.leafModule.nextLeaf = leaf;
+  const modal = new h.FloatSearchModal(() => {}, h.plugin, { query: 'needle' });
+  await modal.initSearchView(new ElementStub());
+  leaf.view.searchComponent.inputEl.value = '现场输入';
+  await h.clock.tick(0);
+  assert.equal(writes, 0);
+  assert.equal(leaf.view.searchComponent.inputEl.selectionCount || 0, 0);
+});
+
+function makeRecentFileTransitionHarness() {
+  const h = createHarness();
+  const start = new h.TFile('Start.md');
+  const alpha = new h.TFile('Notes/Alpha.md');
+  const bravo = new h.TFile('Other/Bravo.md');
+  const paper = new h.TFile('Objects/Paper.pdf');
+  const corePaths = [paper.path, start.path];
+  const recentPaths = [paper.path, bravo.path];
+  const workspace = h.app.workspace;
+  const listeners = new Map();
+  const cleanups = [];
+  Object.setPrototypeOf(workspace, h.Workspace.prototype);
+  workspace.activeLeaf = { view: { file: start } };
+  workspace.lastActiveFile = start;
+  workspace.layoutReady = true;
+  workspace.getActiveViewOfType = () => ({ leaf: workspace.activeLeaf });
+  workspace.getActiveFileView = workspace.getActiveViewOfType;
+  workspace.getActiveFile = () => workspace.activeLeaf.view.file;
+  const removePath = (paths, file) => {
+    const index = paths.indexOf(file.path);
+    if (index !== -1) paths.splice(index, 1);
+  };
+  workspace.recentFileTracker = {
+    // Obsidian 1.15 saves the previous file when the active file changes.
+    onFileOpen(_current, previous) {
+      if (!previous) return;
+      removePath(corePaths, previous);
+      corePaths.unshift(previous.path);
+    },
+  };
+  workspace.on = (event, listener) => {
+    if (!listeners.has(event)) listeners.set(event, new Set());
+    listeners.get(event).add(listener);
+    return () => listeners.get(event).delete(listener);
+  };
+  workspace.trigger = (event, file) => {
+    for (const listener of listeners.get(event) ?? []) listener(file);
+  };
+  const recent = {
+    app: h.app,
+    shouldAddFile: () => true,
+    // Recent Files 1.7.10 removes an old entry before checking whether to re-add it.
+    update(file) {
+      if (!file) return;
+      removePath(recentPaths, file);
+      if (this.shouldAddFile(file)) recentPaths.unshift(file.path);
+    },
+  };
+  h.app.plugins = { plugins: { 'recent-files-obsidian': recent } };
+  workspace.on('file-open', (file) => recent.update(file));
+  const plugin = Object.assign(new h.default(), {
+    app: h.app,
+    register: (cleanup) => cleanups.push(cleanup),
+    registerEvent: (cleanup) => cleanups.push(cleanup),
+  });
+  plugin.patchWorkspace();
+  plugin.hookRecentFilesPlugin();
+  return {
+    start, alpha, bravo, paper, corePaths, recentPaths,
+    switchTo(file, embedded = false) {
+      workspace.activeLeaf = { view: { file }, embedded };
+      workspace.trigger('active-leaf-change', workspace.activeLeaf);
+      const previous = workspace.lastActiveFile;
+      if (previous === file) return;
+      workspace.recentFileTracker.onFileOpen(file, previous);
+      workspace.lastActiveFile = file;
+      workspace.trigger('file-open', file);
+    },
+    unload() { cleanups.reverse().forEach((cleanup) => cleanup()); },
+  };
+}
+
+test('native recent-file tracker ignores preview transitions and records an explicit open of the same file', () => {
+  const h = makeRecentFileTransitionHarness();
+  const { start, alpha, bravo, paper, corePaths } = h;
+  try {
+    h.switchTo(alpha, true);
+    h.switchTo(bravo, true);
+    h.switchTo(start);
+    assert.deepEqual(corePaths, [paper.path, start.path]);
+
+    h.switchTo(bravo, true);
+    h.switchTo(bravo);
+    h.switchTo(start);
+    assert.deepEqual(corePaths, [bravo.path, start.path, paper.path]);
+
+    h.switchTo(alpha, true);
+  } finally {
+    h.unload();
+  }
+  h.switchTo(start);
+  assert.deepEqual(corePaths, [bravo.path, start.path, paper.path]);
+});
+
+test('closing a preview does not add the already open note back to Recent Files', () => {
+  const h = makeRecentFileTransitionHarness();
+  const { start, bravo, paper, recentPaths } = h;
+  try {
+    h.switchTo(bravo, true);
+    h.switchTo(start);
+    assert.deepEqual(recentPaths, [paper.path, bravo.path]);
+
+    // A real tab takes over the same file. Obsidian emits active-leaf-change
+    // but does not send onFileOpen because the file identity did not change.
+    h.switchTo(bravo, true);
+    h.switchTo(bravo);
+    assert.deepEqual(recentPaths, [bravo.path, paper.path]);
+    h.switchTo(start);
+    assert.deepEqual(recentPaths, [start.path, bravo.path, paper.path]);
+  } finally {
+    h.unload();
+  }
 });

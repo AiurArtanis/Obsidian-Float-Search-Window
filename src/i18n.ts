@@ -12,10 +12,8 @@ export function getLocale(): Locale {
 		lang = "";
 	}
 	if (!lang) {
-		lang =
-			window.localStorage.getItem("language") ||
-			navigator.language ||
-			"en";
+		// Older hosts do not expose getLanguage().
+		lang = window.localStorage.getItem("language") || navigator.language || "en";
 	}
 	return lang.toLowerCase().startsWith("zh") ? "zh" : "en";
 }
@@ -67,7 +65,7 @@ export interface Strings {
 	viewType: Record<ViewTypeKey, string>;
 	viewTypeMenu: (type: string) => string;
 	switchToFileView: string;
-	ribbonSearch: (type: ViewTypeKey | string) => string;
+	ribbonSearch: (type: string) => string;
 	cmdSearchGlobally: string;
 	cmdSearchGloballyState: string;
 	cmdSearchCurrentFile: string;

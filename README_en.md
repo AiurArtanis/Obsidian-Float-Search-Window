@@ -1,179 +1,100 @@
-<p align="center">
-  <img src="media/banner.jpg" alt="Float Search Window banner" width="720">
-</p>
-
-<p align="center">
-  <a href="README.md"><img alt="中文" src="https://img.shields.io/badge/lang-%E4%B8%AD%E6%96%87-red?style=flat-square"></a>
-  <a href="README_en.md"><img alt="English" src="https://img.shields.io/badge/lang-English-blue?style=flat-square"></a>
-  <a href="https://github.com/AiurArtanis/Obsidian-Float-Search-Window/stargazers"><img alt="stars" src="https://img.shields.io/github/stars/AiurArtanis/Obsidian-Float-Search-Window?style=flat-square"></a>
-  <a href="https://github.com/AiurArtanis/Obsidian-Float-Search-Window/network/members"><img alt="forks" src="https://img.shields.io/github/forks/AiurArtanis/Obsidian-Float-Search-Window?style=flat-square"></a>
-  <img alt="last commit" src="https://img.shields.io/github/last-commit/AiurArtanis/Obsidian-Float-Search-Window?color=blue&style=flat-square">
-  <a href="LICENSE"><img alt="license" src="https://img.shields.io/github/license/AiurArtanis/Obsidian-Float-Search-Window?color=blue&style=flat-square"></a>
-  <a href="https://github.com/AiurArtanis/Obsidian-Float-Search-Window/releases"><img alt="release" src="https://img.shields.io/github/v/release/AiurArtanis/Obsidian-Float-Search-Window?style=flat-square"></a>
-  <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-3178C6?style=flat-square&logo=typescript&logoColor=white">
-  <img alt="Obsidian" src="https://img.shields.io/badge/Obsidian-plugin-8A5CF5?logo=obsidian&logoColor=white&style=flat-square">
-</p>
+<img src="./media/float-search-window.svg" width="72" height="72" alt="Float Search Window logo">
 
 # Float Search Window
 
-Use Obsidian's built-in search view in a floating modal, split, tab, or pop-out window. This repository continues maintenance for Windows and Chinese IME.
+Open Obsidian’s native search over the note you’re reading. Narrow a query with `path:` or `tag:`, then preview a match beside the results. To jump straight to a file, heading, or passage, double-tap `Shift` for Quick Search. When you type with a Chinese input method, Quick Search waits for you to confirm the characters before updating results.
 
-[中文](README.md) | [English](README_en.md)
+[中文](./README.md) · [Install](#install) · [Commands and shortcuts](#commands-and-shortcuts)
 
-This repository is a fork of [Quorafind/Obsidian-Float-Search](https://github.com/Quorafind/Obsidian-Float-Search) by [Boninall](https://github.com/Quorafind). The original author is no longer maintaining it. This line continues from upstream 4.3.0. Please star the upstream repo as well. Open issues here first.
+**[Download the latest release](https://github.com/AiurArtanis/Obsidian-Float-Search-Window/releases/latest).** Version 1.3.0 supports relevance sorting in Obsidian 1.15.1 and improves native file opening, regex search, and previews. [1.3.0 release notes (Chinese)](./RELEASE_NOTES_1.3.0.md)
 
-## 📖 Table of Contents
+![Native search results for “travel” beside a preview of a sample weekend itinerary](./media/img.jpg)
 
-- [Demo](#demo)
-- [Features](#-features)
-- [What's new vs upstream](#whats-new-vs-upstream)
-- [Install](#-install)
-- [Usage](#usage)
-- [Shortcuts](#️-shortcuts)
-- [Settings](#settings)
-- [Acknowledgements](#-acknowledgements)
-- [License](#license)
-- [Star](#-star)
+*Obsidian 1.14.4 · Float Search Window 1.2.0 · Fictional notes in a public demo vault.*
 
-## Demo
+## Install
 
-Floating search modal:
+The plugin uses its own ID, `float-search-window`, and is currently available through GitHub Releases or BRAT. If the original **Floating Search** (`float-search`) is enabled, disable it first to avoid both plugins handling search actions.
 
-<p align="center">
-  <img src="media/img.png" alt="Floating search modal screenshot" width="720">
-</p>
+**Manual installation**
 
-## ✨ Features
+1. Download `main.js`, `manifest.json`, and `styles.css` from **Assets** on the [latest release](https://github.com/AiurArtanis/Obsidian-Float-Search-Window/releases/latest).
+2. Put all three files in `.obsidian/plugins/float-search-window/` inside your vault. If you use a custom configuration folder, substitute its name for `.obsidian`.
+3. Reload Obsidian and enable **Float Search Window** under **Settings → Community plugins**.
 
-- Open native Obsidian search in a modal, sidebar, split, tab, or window
-- Double-tap `Shift` (configurable) for CMDK quick search across files, headings, and content, with preview
-- Wait until IME composition ends before searching, so Chinese input is not interrupted
-- Filter by Bases and Canvas, or limit results to starred notes
-- Match case and regular expressions (VS Code-style icon toggles)
-- Preview a hit on the right of the modal before choosing where to open it
-- Right-click selected text to search
-- Launch from outside with `obsidian://fs?query=keyword`
-- Optionally create a timestamped note from the quick-search query
+**Install with BRAT.** Install and enable [BRAT](https://github.com/TfTHacker/obsidian42-brat). In its settings, add `AiurArtanis/Obsidian-Float-Search-Window`, select a released version, then enable **Float Search Window**.
 
-## What's new vs upstream
+## Search and filter
 
-Added on top of [Floating Search 4.3.0](https://github.com/Quorafind/Obsidian-Float-Search):
+| Entry point | How to use it |
+| --- | --- |
+| Native floating search | Run **Float Search Window: Search obsidian globally** from the command palette. Use Obsidian’s query syntax, for example `path:demo travel`. Select a match with the arrow keys and press `Tab` to preview. You can also select text in the editor and search from its context menu. |
+| Quick Search (CMDK) | Double-tap `Shift` and enter a file name, heading, or passage. Choose a result with `↑` or `↓` and press `Enter` to open it. Heading and text matches take you to their location in the note. Press `Esc` to close. |
 
-| Item | What it does |
-|---|---|
-| Chinese IME | Do not query while composing, so pinyin is not swallowed or reordered |
-| zh / en UI | Follows the Obsidian language for settings, commands, and key hints |
-| Tabbed settings | General / Quick Search / Quick Create |
-| Multi-filters | Bases and Canvas checkboxes; All / Starred only segment; Aa and regex |
-| Separate plugin id | `float-search-window`, so the official `float-search` is not overwritten |
+Both filter bars let you include or exclude Bases and Canvas files. Choose **All** or **Starred only**, use **Aa** to match case, or toggle `.*` for regular expressions. Enable Obsidian’s Bookmarks core plugin to filter by bookmarked files.
 
-Filter row on the global search modal:
+<details>
+<summary>See the filter bar in each search view</summary>
 
-<p align="center">
-  <img src="media/filter-global.png" alt="Global search filter row" width="720">
-</p>
+**Native search** · A path-restricted query shows matching passages under each note.
 
-The same row on the quick-search palette (double-tap Shift):
+![Native search with Bases, Canvas, bookmarked files, match case, and regex controls](./media/filter-global.jpg)
 
-<p align="center">
-  <img src="media/filter-cmdk.png" alt="Quick search filter row" width="720">
-</p>
+**Quick Search** · Selecting the sample reading list shows the note beside the results.
 
-## 📦 Install
+![Quick Search with fictional notes on the left and a preview of the selected reading list on the right](./media/filter-cmdk.jpg)
 
-This repo is not in the official community plugin list. The plugin id is `float-search-window`, so it does not overwrite the official Floating Search (`float-search`).
+</details>
 
-### BRAT
+## Commands and shortcuts
 
-1. Install [BRAT](https://github.com/TfTHacker/obsidian42-brat)
-2. Add `AiurArtanis/Obsidian-Float-Search-Window`
-3. Enable **Float Search Window**, and disable the official **Floating Search** if it is still on
-
-### Manual
-
-1. Download `main.js`, `manifest.json`, and `styles.css` from [Releases](https://github.com/AiurArtanis/Obsidian-Float-Search-Window/releases)
-2. Put them in `{vault}/.obsidian/plugins/float-search-window/`
-3. Reload installed plugins, then enable it
-
-## Usage
-
-### Commands
+Search for `Float Search` in the command palette or under **Settings → Hotkeys**. Commands have no default hotkeys. The double-tap trigger for Quick Search is configured separately.
 
 | Command | What it does |
-|---|---|
-| Search obsidian globally | Global search; clears the query each time |
-| Search Obsidian Globally (With Last State) | Global search; keeps the last query for about 30 seconds |
-| Search in current file | Search only the current file |
-| Search in backlink Of current file | Search backlinks to the current file |
-| Open search view (split / tab / window) | Open search in a split, tab, or window |
-| Show/hide file path | Toggle paths in results |
+| --- | --- |
+| Search obsidian globally | Start with an empty query. |
+| Search Obsidian Globally (With Last State) | Restore the previous query, which expires after about 30 seconds. |
+| Search in current file / Search in backlink Of current file | Search within the active file or find links pointing to it. |
+| Open search view (split / tab / window) | Open native search in the chosen location. |
+| Show/hide file path | Toggle paths in the results list. |
+| Search operator commands | Insert a query for a file name, path, tag, line, block, section, task, or property. |
 
-Commands have no default hotkeys. Bind them under **Settings → Hotkeys** by searching `Float Search`.
+<details>
+<summary>Windows keyboard and mouse controls for native floating search</summary>
 
-### Inside the modal
+| With the search input focused | Action |
+| --- | --- |
+| `↑` / `↓` | Select the previous / next result. |
+| `Shift+↑` / `Shift+↓` | Collapse / expand matches. |
+| `Enter` / `Ctrl+Enter` | Open in the background / in a new background tab. |
+| `Alt+Enter` / `Ctrl+Shift+Alt+Enter` | Open and close the search window / open in a new window and close search. |
+| `Tab` / `Shift+Tab` | Open / close the preview on the right. |
+| `Ctrl+Shift+C` | Copy the selected result text. |
+| `Ctrl+E` / `Ctrl+G` | Toggle reading view / move focus between the search input and preview. |
 
-While the search input is focused:
+With a preview open, clicking another result updates the preview. `Alt+click` opens the file and closes the search window. With the preview closed, clicking a result opens the file and closes search.
 
-- `↑` `↓` move between results; `Shift+↑/↓` expand or collapse
-- `Enter` opens in the background; `Ctrl+Enter` opens in a new background tab; `Alt+Enter` opens and closes the modal
-- `Ctrl+Shift+Alt+Enter` opens in a new window and closes the modal
-- `Tab` previews on the right; `Shift+Tab` closes the preview
-- `Ctrl+Shift+C` copies the current result
-- While previewing, `Ctrl+E` toggles reading view; `Ctrl+G` jumps between the input and the preview
+</details>
 
-With a preview open, clicking a result only switches the preview; `Alt+click` opens and closes the modal. With no preview, a click opens the file and closes the modal.
+## Settings and URI
 
-### URI
+Settings follow Obsidian’s interface language and are available in Chinese and English.
 
-```
+- **General** controls where search opens (modal, sidebar, split, tab, or window), file paths, and key hints.
+- **Quick Search** lets you choose a double-tap trigger (`Shift`, `Ctrl`, `Alt`, or `Meta`) or disable it. The default interval is 300 ms.
+- **Quick Create** lets you create a note from the query text when Quick Search finds no exact match. Choose a destination folder and a timestamp format for the file name.
+
+Use a URI to start a search from another app. The first example opens a modal and the second opens a tab.
+
+```text
 obsidian://fs?query=hello
 obsidian://fs?query=world&viewType=tab
 ```
 
-`viewType` can be `modal` (default), `sidebar`, `split`, `tab`, or `window`.
+Supported `viewType` values are `modal` (default), `sidebar`, `split`, `tab`, and `window`. URL-encode the query value if it contains spaces or other special characters.
 
-## ⌨️ Shortcuts
+## Credits and license
 
-| Action | Default | Notes |
-|---|---|---|
-| Open CMDK quick search | Double-tap `Shift` | Change to Ctrl / Alt / Meta, or disable, in settings |
+Float Search Window is an independent continuation of **Floating Search**, originally written by **Boninall (Quorafind)** and maintained in this fork by AiurArtanis since upstream 4.3.0. The original author granted written permission to list this fork (`float-search-window`) in the community directory with original-author credit. [Upstream project](https://github.com/Quorafind/Obsidian-Float-Search) · [Permission from the original author](https://github.com/Quorafind/Obsidian-Float-Search/issues/87#issuecomment-7038819917)
 
-See the previous section for in-modal keys. Command hotkeys are unbound by default.
-
-<details>
-<summary><strong>Full in-modal keymap</strong></summary>
-
-| Key | Action |
-|---|---|
-| `↑` `↓` | Move between results |
-| `Shift+↑/↓` | Expand / collapse |
-| `Enter` | Open in background |
-| `Ctrl+Enter` | Open in a new background tab |
-| `Alt+Enter` | Open and close the modal |
-| `Ctrl+Shift+Alt+Enter` | Open in a new window and close |
-| `Tab` / `Shift+Tab` | Open / close preview |
-| `Ctrl+Shift+C` | Copy result |
-| `Ctrl+E` | Toggle preview reading view |
-| `Ctrl+G` | Jump input ↔ preview |
-| `Alt+click` | Open and close the modal |
-
-</details>
-
-## Settings
-
-- **General**: default view, show file path, show key hints
-- **Quick Search**: which key double-tap opens CMDK, and the max gap between presses (default 300ms)
-- **Quick Create**: create a note from the query when there is no exact match, plus folder and timestamp title format
-
-## 🙏 Acknowledgements
-
-- [Boninall / Quorafind](https://github.com/Quorafind) and [Obsidian-Float-Search](https://github.com/Quorafind/Obsidian-Float-Search)
-- Embedded leaf implementation from [obsidian-hover-editor](https://github.com/nothingislost/obsidian-hover-editor)
-
-## License
-
-[GPL-3.0](LICENSE). See [NOTICE](NOTICE) for copyright and upstream credit.
-
-## ⭐ Star
-
-If this project helps you, please star the repository.
+The embedded workspace view draws on [Hover Editor](https://github.com/nothingislost/obsidian-hover-editor). This repository is licensed under [GPL-3.0](./LICENSE). See [NOTICE](./NOTICE) for copyright and upstream attribution.

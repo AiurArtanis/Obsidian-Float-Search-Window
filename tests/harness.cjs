@@ -64,7 +64,7 @@ function deferred() {
   return { promise, resolve, reject };
 }
 
-function createHarness() {
+function createHarness({ apiVersion = '1.15.1' } = {}) {
   let nextTimer = 0;
   let now = 0;
   const timers = new Map();
@@ -158,7 +158,12 @@ function createHarness() {
       const index = text.toLowerCase().indexOf(query.toLowerCase());
       return index < 0 ? null : { score: 1, matches: [[index, index + query.length]] };
     },
-    requireApiVersion: () => true,
+    requireApiVersion: (minimum) => {
+      const actual = apiVersion.split('.').map(Number);
+      const expected = minimum.split('.').map(Number);
+      const firstDifference = expected.findIndex((part, index) => part !== actual[index]);
+      return firstDifference === -1 || actual[firstDifference] > expected[firstDifference];
+    },
     getLanguage: () => 'en',
     setIcon() {}, addIcon() {}, renderResults() {},
   };
@@ -187,8 +192,8 @@ function createHarness() {
       spawned.push({ leaf, embedded });
       return [leaf, embedded];
     },
-    EmbeddedView: class {},
-    isEmebeddedLeaf: () => false,
+    EmbeddedView: class { static activeWindows() { return []; } },
+    isEmebeddedLeaf: (leaf) => leaf?.embedded === true,
   };
   const sourceRoot = process.env.FLOAT_SEARCH_TEST_SOURCE_ROOT || path.resolve(__dirname, '..');
   const loaded = new Map();
@@ -197,7 +202,7 @@ function createHarness() {
     const filename = path.join(sourceRoot, 'src', `${name}.ts`);
     let source = fs.readFileSync(filename, 'utf8');
     // Test-only exports leave the plugin's public API unchanged.
-    if (name === 'floatSearchIndex') source += '\nexport { FloatSearchCmdkModal, FloatSearchModal };\n';
+    if (name === 'floatSearchIndex' && !fs.existsSync(path.join(sourceRoot, 'src', 'floatSearchModal.ts'))) source += '\nexport { FloatSearchCmdkModal, FloatSearchModal };\n';
     const { code } = transformSync(source, { loader: 'ts', format: 'cjs', target: 'node18', sourcefile: filename });
     const module = { exports: {} };
     loaded.set(name, module.exports);
@@ -207,9 +212,8 @@ function createHarness() {
         if (id === 'obsidian') return obsidian;
         if (id === './leafView') return leafModule;
         if (id === './i18n') return { strings: () => ({}) };
-        if (id === './filterBar') return load('filterBar');
-        if (id === './openFile') return load('openFile');
         if (id === 'monkey-around') return require('monkey-around');
+        if (id.startsWith('./')) return load(id.slice(2));
         throw new Error(`Unexpected dependency: ${id}`);
       },
       setTimeout: clock.setTimeout,
@@ -217,7 +221,7 @@ function createHarness() {
       AbortController, performance: { now: () => now },
       createDiv: () => new ElementStub(),
       document: { createElement: () => new ElementStub() },
-      window: {}, navigator: { language: 'en' },
+      window: { setTimeout: clock.setTimeout, clearTimeout: clock.clearTimeout }, navigator: { language: 'en' },
       MutationObserver: class { observe() {} disconnect() {} },
     };
     vm.runInNewContext(code, context, { filename });
@@ -250,8 +254,11 @@ function createHarness() {
     },
     async saveSettings() {},
   };
-  return { ...load('floatSearchIndex'), filters: load('filterBar'), clock, app, plugin,
-    mainLeaf, makeLeaf, leafModule, spawned, TFile, ElementStub };
+  const modals = fs.existsSync(path.join(sourceRoot, 'src', 'floatSearchModal.ts'))
+    ? { ...load('floatSearchModal'), ...load('floatSearchCmdk') }
+    : {};
+  return { ...load('floatSearchIndex'), ...modals, filters: load('filterBar'), clock, app, plugin,
+    mainLeaf, makeLeaf, leafModule, spawned, TFile, ElementStub, load, Workspace: obsidian.Workspace };
 }
 
 module.exports = { createHarness, deferred, ElementStub };

@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128" role="img" aria-labelledby="title">
+  <title id="title">Float Search Window</title>
+  <rect x="2" y="2" width="124" height="124" rx="31" fill="#242139" stroke="#8981AE" stroke-width="3"/>
+  <path d="M21 55v36a12 12 0 0 0 12 12h48" fill="none" stroke="#AAA0DE" stroke-width="7" stroke-linecap="round"/>
+  <rect x="33" y="29" width="74" height="62" rx="12" fill="#CDC4FF"/>
+  <path d="M102 80 87 65" fill="none" stroke="#242139" stroke-width="9" stroke-linecap="round"/>
+  <circle cx="76" cy="55" r="16" fill="#96F1D1" stroke="#242139" stroke-width="8"/>
+</svg>
